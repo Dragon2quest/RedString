@@ -1,0 +1,525 @@
+Here is the complete engineering blueprint and implementation guide to build the **Red String** software from scratch, connecting Desktop and Mobile directly over local TCP sockets.
+
+---
+
+### Project Architecture Overview
+
+```
+                      ┌────────────────────────────────────────┐
+                      │          DESKTOP (Rust / Tokio)        │
+                      │  • Binds TCP 0.0.0.0:7788              │
+                      │  • Enforces Platform Buffer (1GB+15%)  │
+                      │  • Emits Magic Circle Pairing Token    │
+                      └──────────────────┬─────────────────────┘
+                                         │
+                         [ Direct LAN / Wi-Fi Socket ]
+                                         │
+                      ┌──────────────────▼─────────────────────┐
+                      │          MOBILE (Flutter / Dart)       │
+                      │  • Scans Magic Circle QR               │
+                      │  • Connects directly to Desktop IP     │
+                      │  • Fate Sync & Fate Watch UI           │
+                      └────────────────────────────────────────┘
+
+```
+
+The protocol uses a strict **5-byte binary header**:
+
+* **Byte 0:** Frame Type (`0x01` = JSON Control/Text, `0x02` = Binary File Chunk).
+* **Bytes 1–4:** Payload Length (32-bit Big-Endian unsigned integer).
+
+---
+
+## Part 1: The Desktop Engine (Rust + Tokio)
+
+The desktop acts as the local TCP listener, holding the Platform drop buffer and dispatching live text streams.
+
+### 1. Project Setup
+
+```bash
+cargo new red_string_desktop --bin
+cd red_string_desktop
+
+```
+
+Edit `Cargo.toml`:
+
+```toml
+[package]
+name = "red_string_desktop"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+byteorder = "1.5"
+local-ip-address = "0.6"
+
+```
+
+### 2. Protocol Definitions (`src/protocol.rs`)
+
+```rust
+use serde::{Deserialize, Serialize};
+
+pub const FRAME_TYPE_TEXT: u8 = 0x01;
+pub const FRAME_TYPE_BINARY: u8 = 0x02;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum ControlPacket {
+    #[serde(rename = "HANDSHAKE_INIT")]
+    HandshakeInit {
+        device_name: String,
+        platform_soft_limit_bytes: u64,
+        platform_flex_limit_bytes: u64,
+    },
+    #[serde(rename = "FATE_SYNC_TEXT")]
+    FateSyncText {
+        sender: String,
+        content: String,
+    },
+    #[serde(rename = "FATE_WATCH_DELTA")]
+    FateWatchDelta {
+        action: String, // "insert" or "delete"
+        chars: String,
+    },
+    #[serde(rename = "FILE_OFFER")]
+    FileOffer {
+        file_name: String,
+        total_size: u64,
+    },
+}
+
+pub struct PlatformBuffer {
+    pub soft_limit: u64,
+    pub flex_limit: u64,
+    pub current_usage: u64,
+}
+
+impl PlatformBuffer {
+    pub fn new(soft_mb: u64) -> Self {
+        let soft_limit = soft_mb * 1024 * 1024;
+        let flex_limit = soft_limit + (soft_limit * 15 / 100); // +15% elastic margin
+        Self {
+            soft_limit,
+            flex_limit,
+            current_usage: 0,
+        }
+    }
+
+    pub fn can_accept(&self, file_size: u64) -> Result<bool, &'static str> {
+        let projected = self.current_usage + file_size;
+        if projected > self.flex_limit {
+            Err("Platform hard ceiling exceeded. File rejected.")
+        } else if projected > self.soft_limit {
+            Ok(true) // Accepted into elastic flex zone
+        } else {
+            Ok(false) // Standard transfer
+        }
+    }
+}
+
+```
+
+### 3. Server Implementation (`src/main.rs`)
+
+```rust
+mod protocol;
+
+use byteorder::{BigEndian, ByteOrder};
+use local_ip_address::local_ip;
+use protocol::{ControlPacket, PlatformBuffer, FRAME_TYPE_BINARY, FRAME_TYPE_TEXT};
+use std::sync::Arc;
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+use tokio::sync::Mutex;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let my_ip = local_ip().unwrap_or([127, 0, 0, 1].into());
+    let port = 7788;
+    let bind_addr = format!("0.0.0.0:{}", port);
+    let listener = TcpListener::bind(&bind_addr).await?;
+
+    let platform = Arc::new(Mutex::new(PlatformBuffer::new(1024))); // Default: 1 GB Soft Limit
+
+    println!("========================================================");
+    println!("             RED STRING - THE CORE WEAVE               ");
+    println!("========================================================");
+    println!("[*] Desktop listening on: {}:{}", my_ip, port);
+    println!("[*] Pairing Token Payload:");
+    println!(
+        "    {{\"ip\":\"{}\",\"port\":{},\"soft_mb\":1024}}",
+        my_ip, port
+    );
+    println!("--------------------------------------------------------");
+    println!("[*] Waiting for mobile node to weave thread...\n");
+
+    loop {
+        let (mut socket, peer_addr) = listener.accept().await?;
+        println!("[+] Red String connected to mobile: {}", peer_addr);
+        let platform_ref = Arc::clone(&platform);
+
+        tokio::spawn(async move {
+            let mut header_buf = [0u8; 5];
+            let mut active_file: Option<File> = None;
+
+            loop {
+                // Read 5-byte frame header: [Type: 1B][Length: 4B]
+                if socket.read_exact(&mut header_buf).await.is_err() {
+                    println!("[-] Thread severed with: {}", peer_addr);
+                    break;
+                }
+
+                let frame_type = header_buf[0];
+                let payload_len = BigEndian::read_u32(&header_buf[1..5]) as usize;
+
+                let mut payload = vec![0u8; payload_len];
+                if socket.read_exact(&mut payload).await.is_err() {
+                    eprintln!("[!] Packet read failed.");
+                    break;
+                }
+
+                match frame_type {
+                    FRAME_TYPE_TEXT => {
+                        if let Ok(pkt) = serde_json::from_slice::<ControlPacket>(&payload) {
+                            match pkt {
+                                ControlPacket::FateWatchDelta { action, chars } => {
+                                    if action == "insert" {
+                                        print!("{}", chars);
+                                        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+                                    } else if action == "delete" {
+                                        print!("\x08 \x08"); // Backspace visual
+                                        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+                                    }
+                                }
+                                ControlPacket::FateSyncText { sender, content } => {
+                                    println!("\n[Fate Sync] {}: {}", sender, content);
+                                }
+                                ControlPacket::FileOffer { file_name, total_size } => {
+                                    let mut p = platform_ref.lock().await;
+                                    match p.can_accept(total_size) {
+                                        Ok(in_flex) => {
+                                            if in_flex {
+                                                println!("\n[!] WARNING: File enters +15% Elastic Buffer Zone.");
+                                            }
+                                            println!("[Platform] Receiving incoming artifact: {} ({} bytes)", file_name, total_size);
+                                            active_file = Some(File::create(format!("received_{}", file_name)).await.unwrap());
+                                            p.current_usage += total_size;
+                                        }
+                                        Err(reason) => {
+                                            eprintln!("\n[Platform Drop Rejected]: {}", reason);
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    FRAME_TYPE_BINARY => {
+                        if let Some(ref mut file) = active_file {
+                            if let Err(e) = file.write_all(&payload).await {
+                                eprintln!("[!] Failed writing chunk to disk: {}", e);
+                            }
+                        }
+                    }
+                    _ => eprintln!("[!] Unknown frame prefix: 0x{:02X}", frame_type),
+                }
+            }
+        });
+    }
+}
+
+```
+
+---
+
+## Part 2: The Mobile Client (Flutter)
+
+The mobile client handles scanning the desktop's pairing token, holding the direct TCP connection, streaming live keystrokes, and transmitting files in 64 KB binary frames.
+
+### 1. Dependencies (`pubspec.yaml`)
+
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  mobile_scanner: ^5.2.3    # Camera scanner for Magic Circle QR
+  file_picker: ^8.1.4       # For dropping files into Platform
+
+```
+
+### 2. Client Engine (`lib/services/red_string_client.dart`)
+
+```dart
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+class RedStringClient {
+  Socket? _socket;
+  bool isConnected = false;
+
+  final Function(String) onFateWatchChar;
+  final Function(String sender, String text) onFateSyncReceived;
+
+  RedStringClient({
+    required this.onFateWatchChar,
+    required this.onFateSyncReceived,
+  });
+
+  Future<void> connect(String host, int port) async {
+    _socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
+    isConnected = true;
+
+    _socket!.listen(
+      _handleIncomingData,
+      onError: (err) => isConnected = false,
+      onDone: () => isConnected = false,
+    );
+  }
+
+  void _handleIncomingData(Uint8List data) {
+    if (data.length < 5) return;
+    int frameType = data[0];
+    int length = ByteData.sublistView(data, 1, 5).getUint32(0, Endian.big);
+
+    if (frameType == 0x01 && data.length >= 5 + length) {
+      String jsonStr = utf8.decode(data.sublist(5, 5 + length));
+      Map<String, dynamic> msg = jsonDecode(jsonStr);
+
+      if (msg['type'] == 'FATE_WATCH_DELTA') {
+        onFateWatchChar(msg['chars'] ?? '');
+      } else if (msg['type'] == 'FATE_SYNC_TEXT') {
+        onFateSyncReceived(msg['sender'] ?? 'Desktop', msg['content'] ?? '');
+      }
+    }
+  }
+
+  void _sendFrame(int frameType, Uint8List payload) {
+    if (_socket == null) return;
+    final header = ByteData(5);
+    header.setUint8(0, frameType);
+    header.setUint32(1, payload.length, Endian.big);
+
+    _socket!.add(header.buffer.asUint8List());
+    _socket!.add(payload);
+  }
+
+  // Fate Watch: Transmits single keystrokes live
+  void sendKeystroke(String char) {
+    final payload = jsonEncode({
+      'type': 'FATE_WATCH_DELTA',
+      'action': 'insert',
+      'chars': char,
+    });
+    _sendFrame(0x01, Uint8List.fromList(utf8.encode(payload)));
+  }
+
+  // Fate Sync: Sends completed messages
+  void sendSyncMessage(String text) {
+    final payload = jsonEncode({
+      'type': 'FATE_SYNC_TEXT',
+      'sender': 'Mobile',
+      'content': text,
+    });
+    _sendFrame(0x01, Uint8List.fromList(utf8.encode(payload)));
+  }
+
+  // Platform: Streams file in 64 KB binary frames
+  Future<void> streamFile(File file) async {
+    final fileName = file.uri.pathSegments.last;
+    final totalSize = await file.length();
+
+    // 1. Offer file to verify Platform limits
+    final offerPayload = jsonEncode({
+      'type': 'FILE_OFFER',
+      'file_name': fileName,
+      'total_size': totalSize,
+    });
+    _sendFrame(0x01, Uint8List.fromList(utf8.encode(offerPayload)));
+
+    // 2. Stream 64 KB raw chunks
+    final stream = file.openRead();
+    await for (final chunk in stream) {
+      _sendFrame(0x02, Uint8List.fromList(chunk));
+    }
+  }
+
+  void disconnect() {
+    _socket?.destroy();
+    isConnected = false;
+  }
+}
+
+```
+
+### 3. Mobile UI (`lib/screens/workspace_screen.dart`)
+
+```dart
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import '../services/red_string_client.dart';
+
+class WorkspaceScreen extends StatefulWidget {
+  final String desktopIp;
+  final int port;
+
+  const WorkspaceScreen({super.key, required this.desktopIp, required this.port});
+
+  @override
+  State<WorkspaceScreen> createState() => _WorkspaceScreenState();
+}
+
+class _WorkspaceScreenState extends State<WorkspaceScreen> {
+  late RedStringClient client;
+  final TextEditingController _textController = TextEditingController();
+  String _watchStreamText = "";
+  List<String> _syncMessages = [];
+  bool isWatchMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    client = RedStringClient(
+      onFateWatchChar: (char) => setState(() => _watchStreamText += char),
+      onFateSyncReceived: (s, txt) => setState(() => _syncMessages.add("$s: $txt")),
+    );
+    client.connect(widget.desktopIp, widget.port);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0D11),
+      appBar: AppBar(
+        title: const Text("RED STRING // ACTIVE WEAVE", 
+          style: TextStyle(color: Color(0xFFE63946), fontSize: 16, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF13171F),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.attach_file, color: Color(0xFFE63946)),
+            onPressed: () async {
+              FilePickerResult? res = await FilePicker.platform.pickFiles();
+              if (res != null && res.files.single.path != null) {
+                await client.streamFile(File(res.files.single.path!));
+              }
+            },
+          )
+        ],
+      ),
+      body: Column(
+        children: [
+          // Segmented mode toggle
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            color: const Color(0xFF13171F),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ChoiceChip(
+                  label: const Text("Fate Sync"),
+                  selected: !isWatchMode,
+                  selectedColor: const Color(0xFFE63946),
+                  onSelected: (val) => setState(() => isWatchMode = !val),
+                ),
+                const SizedBox(width: 12),
+                ChoiceChip(
+                  label: const Text("Fate Watch"),
+                  selected: isWatchMode,
+                  selectedColor: const Color(0xFFE63946),
+                  onSelected: (val) => setState(() => isWatchMode = val),
+                ),
+              ],
+            ),
+          ),
+          // Stream display area
+          Expanded(
+            child: isWatchMode
+                ? Container(
+                    padding: const EdgeInsets.all(16),
+                    alignment: Alignment.topLeft,
+                    child: Text(
+                      _watchStreamText.isEmpty ? "> Teleprompter awaiting telemetry..." : _watchStreamText,
+                      style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFFF2A54), fontSize: 16),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _syncMessages.length,
+                    itemBuilder: (ctx, i) => Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF13171F),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(_syncMessages[i], style: const TextStyle(color: Colors.white)),
+                    ),
+                  ),
+          ),
+          // Input bar
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: const Color(0xFF13171F),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _textController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: "Type stream / broadcast...",
+                      hintStyle: TextStyle(color: Colors.grey),
+                      border: InputBorder.none,
+                    ),
+                    onChanged: (val) {
+                      if (isWatchMode && val.isNotEmpty) {
+                        client.sendKeystroke(val.characters.last);
+                      }
+                    },
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Color(0xFFE63946)),
+                  onPressed: () {
+                    if (!isWatchMode && _textController.text.isNotEmpty) {
+                      client.sendSyncMessage(_textController.text);
+                      setState(() => _syncMessages.add("You: ${_textController.text}"));
+                      _textController.clear();
+                    }
+                  },
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+```
+
+---
+
+## Part 3: Running and Testing
+
+1. **Start the Desktop Engine:**
+```bash
+cargo run
+
+```
+
+
+The terminal will print your local IP and port (e.g., `192.168.1.15:7788`).
+2. **Launch Mobile:**
+Pass that IP to your Flutter client and start the app (`flutter run`).
+3. **Verify:**
+* **Fate Watch:** Switch to Fate Watch mode on your phone and type. Each character will immediately appear in your desktop console without pressing enter.
+* **Platform Drop:** Tap the paperclip icon on mobile, select an image or file, and watch the Rust server write the binary stream directly to disk.

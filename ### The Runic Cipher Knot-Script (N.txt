@@ -1,0 +1,159 @@
+### The Runic Cipher: *Knot-Script (Nodus-V1)*
+
+To make this functional both as an **algorithmic security cipher** and a **geometric visual language** for the Magic Circle, this runic system uses a 6-bit encoding matrix (Base64-compatible).
+
+Instead of arbitrary decorative doodles, every glyph is built on a **3×3 sacred grid** (9 bind-points) using standard compass radials. This allows the computer vision parser (OpenCV/camera) to read and decode runes radially along the circle’s orbital rings, while functioning as a cryptographic substitution table.
+
+```
+       Visual Grid (Bind Points)
+             (0,2)───(1,2)───(2,2)
+               │   \   │   /   │
+             (0,1)───(1,1)───(2,1)
+               │   /   │   \   │
+             (0,0)───(1,0)───(2,0)
+
+```
+
+---
+
+### 1. Master Runic Dictionary (Letters A–Z & Numerals)
+
+Each rune has:
+
+* **True Rune Name:** Occult designation.
+* **Vector Path:** Line coordinates connecting the 3×3 bind-points (Bottom-Left is `0,0`, Top-Right is `2,2`, Center is `1,1`).
+* **Semantic Anchor:** Cryptographic salt/hash keyword.
+
+| Char | Hex (ASCII) | Rune Name | 3×3 Vector Strokes (Start $\to$ End) | Glyph Description |
+| --- | --- | --- | --- | --- |
+| **A** | `0x41` | **Aegis** | `(0,0)-(1,2)-(2,0)`, `(0,1)-(2,1)` | Sharp upward spire barred by a horizontal thread |
+| **B** | `0x42` | **Bind** | `(0,0)-(0,2)`, `(0,2)-(1,2)-(1,1)-(0,1)`, `(0,1)-(1,1)-(1,0)-(0,0)` | Vertical stem with dual rightward loops |
+| **C** | `0x43` | **Crescent** | `(2,2)-(0,2)-(0,0)-(2,0)` | Angular left-facing crescent arc |
+| **D** | `0x44` | **Delve** | `(0,0)-(0,2)-(2,1)-(0,0)` | Rightward triangular spearhead on a vertical spine |
+| **E** | `0x45` | **Echo** | `(2,2)-(0,2)-(0,0)-(2,0)`, `(0,1)-(1,1)` | Leftward bracket with a truncated heart-prong |
+| **F** | `0x46` | **Fate** | `(0,0)-(0,2)`, `(0,2)-(2,2)`, `(0,1)-(1,1)` | Towering pillar with two forward-reaching branches |
+| **G** | `0x47` | **Girdle** | `(2,2)-(0,2)-(0,0)-(2,0)-(2,1)-(1,1)` | Enclosing ring curling inwards to the core node |
+| **H** | `0x48` | **Halt** | `(0,0)-(0,2)`, `(2,0)-(2,2)`, `(0,1)-(2,1)` | Dual warding pillars bridged by a crimson tie |
+| **I** | `0x49` | **Iron** | `(1,0)-(1,2)`, `(0,2)-(2,2)`, `(0,0)-(2,0)` | Single central column capped at head and root |
+| **J** | `0x4A` | **Joint** | `(1,2)-(1,0)-(0,0)-(0,1)` | Suspended plumb-line hooked counter-clockwise |
+| **K** | `0x4B` | **Knot** | `(0,0)-(0,2)`, `(2,2)-(0,1)-(2,0)` | Pillar crossed by diverging chevron cords |
+| **L** | `0x4C` | **Loom** | `(0,2)-(0,0)-(2,0)` | Right-angle base bracket, open to the void |
+| **M** | `0x4D` | **Mesh** | `(0,0)-(0,2)-(1,1)-(2,2)-(2,0)` | Twin pillars sinking to a central low nadir |
+| **N** | `0x4E` | **Nexus** | `(0,0)-(0,2)-(2,0)-(2,2)` | Dual spires bound by a single descending diagonal |
+| **O** | `0x4F` | **Orbit** | `(0,0)-(0,2)-(2,2)-(2,0)-(0,0)` | Sealed rectangular perimeter ward |
+| **P** | `0x50` | **Prism** | `(0,0)-(0,2)-(2,2)-(2,1)-(0,1)` | Elevated banner box bound to a grounded stem |
+| **Q** | `0x51` | **Quell** | `(0,0)-(0,2)-(2,2)-(2,0)-(0,0)`, `(1,1)-(2,0)` | Sealed box struck through by a descending fang |
+| **R** | `0x52` | **Rend** | `(0,0)-(0,2)-(2,2)-(2,1)-(0,1)`, `(0,1)-(2,0)` | Towering banner discharging a diagonal kick |
+| **S** | `0x53` | **Spire** | `(2,2)-(0,2)-(0,1)-(2,1)-(2,0)-(0,0)` | Serpentine lightning stroke zig-zagging downward |
+| **T** | `0x54` | **Tether** | `(0,2)-(2,2)`, `(1,2)-(1,0)` | Horizontal crossbeam anchoring a central plumb |
+| **U** | `0x55` | **Umbra** | `(0,2)-(0,0)-(2,0)-(2,2)` | Open chalice waiting for binary input |
+| **V** | `0x56` | **Vow** | `(0,2)-(1,0)-(2,2)` | Inverted wedge converging on the ground anchor |
+| **W** | `0x57` | **Weft** | `(0,2)-(0,0)-(1,1)-(2,0)-(2,2)` | Double wedge rising to a central needle node |
+| **X** | `0x58` | **Xylo** | `(0,0)-(2,2)`, `(0,2)-(2,0)` | Intersecting cardinal diagonals |
+| **Y** | `0x59` | **Yoke** | `(0,2)-(1,1)-(2,2)`, `(1,1)-(1,0)` | Diverging fork standing on a single stalk |
+| **Z** | `0x5A` | **Zenith** | `(0,2)-(2,2)-(0,0)-(2,0)` | Upper and lower beams bound by a sharp traverse |
+
+---
+
+### 2. Numerals (Platform Capacity Weights)
+
+Numbers represent buffer tiers, byte multiples, and port parameters:
+
+| Digit | Rune Name | 3×3 Vector Strokes | Visual Signature |
+| --- | --- | --- | --- |
+| **0** | **Void** | `(0,0)-(0,2)-(2,2)-(2,0)-(0,0)`, `(0,0)-(2,2)` | Box halved diagonally |
+| **1** | **Monad** | `(0,1)-(1,2)-(1,0)` | Single upright needle |
+| **2** | **Dyad** | `(0,2)-(2,2)-(2,1)-(0,1)-(0,0)-(2,0)` | Swan-curve step |
+| **3** | **Triad** | `(0,2)-(2,2)-(1,1)-(2,1)-(2,0)-(0,0)` | Stacked dual wedges |
+| **4** | **Tetrad** | `(2,1)-(0,1)-(1,2)-(1,0)` | Cross-sail banner |
+| **5** | **Pentad** | `(2,2)-(0,2)-(0,1)-(2,1)-(2,0)-(0,0)` | Inverted hook clamp |
+| **6** | **Hexad** | `(2,2)-(0,2)-(0,0)-(2,0)-(2,1)-(0,1)` | Enclosed lower basin |
+| **7** | **Heptad** | `(0,2)-(2,2)-(1,0)` | High horizontal with angled blade |
+| **8** | **Octad** | `(0,0)-(0,2)-(2,2)-(2,0)-(0,0)`, `(0,1)-(2,1)` | Dual chambered gate |
+| **9** | **Ennead** | `(2,0)-(2,2)-(0,2)-(0,1)-(2,1)` | High closed eye with grounded plumb |
+
+---
+
+### 3. Cryptographic Security Layer: *The Knot-Cipher*
+
+Using the runes as raw character replacement is a simple substitution cipher. To make this **cryptographically robust against local network sniffing**, Red String uses a **Dynamic Spiral Feistel Round**:
+
+$$\text{CipherRune}[i] = (\text{PlainByte}[i] \oplus \text{KeyByte}[i \pmod{32}] \oplus \text{Salt}[i]) \pmod{36}$$
+
+1. **Ephemerality:** The Secret Key is generated per session using 256-bit entropy.
+2. **Radial Salt:** The salt changes based on the rune's angle ($\theta$) on the Magic Circle:
+
+$$\text{Salt}[i] = \lfloor (i \cdot \phi) \times 256 \rfloor \pmod{64}$$
+
+
+
+*(where $\phi$ is the golden ratio $\approx 1.618$)*.
+3. **Double-State Obfuscation:** Even if an observer photographs the Magic Circle, the runes cannot be decrypted without knowing the current session initialization timestamp embedded in the center QR core.
+
+---
+
+### 4. Integration with the Magic Circle Engine
+
+In the procedural Magic Circle generator, these runes are drawn around concentric polar rings using HTML5 Canvas / WebGL:
+
+```
+                  [ Outer Ring: Wards & Aesthetics ]
+             [ Middle Ring: Polar-Encoded Runic Stream ]
+        [ Inner Ring: Platform Capacity Geometry (Hex/Octa) ]
+               [ Core: Dense Micro-QR / Key Seed ]
+
+```
+
+#### Canvas Vector Rendering Function
+
+Every letter translates into stroke commands on the canvas:
+
+```javascript
+// Runic dictionary vector definition (normalized 0.0 to 1.0)
+const RUNES = {
+  'A': [[0,0, 0.5,1], [0.5,1, 1,0], [0.25,0.5, 0.75,0.5]],
+  'F': [[0,0, 0,1], [0,1, 1,1], [0,0.5, 0.6,0.5]],
+  'K': [[0,0, 0,1], [1,1, 0,0.5], [0,0.5, 1,0]],
+  'S': [[1,1, 0,1], [0,1, 0,0.5], [0,0.5, 1,0.5], [1,0.5, 1,0], [1,0, 0,0]],
+  'T': [[0,1, 1,1], [0.5,1, 0.5,0]],
+  // ... other letters mapped to the 3x3 normalized grid
+};
+
+/**
+ * Draws a rune at an exact angle and radius along the Magic Circle
+ */
+function drawRuneAtAngle(ctx, char, angle, radius, size) {
+  const strokes = RUNES[char.toUpperCase()];
+  if (!strokes) return;
+
+  ctx.save();
+  // Move to orbital point along circle circumference
+  ctx.translate(
+    canvas.width / 2 + Math.cos(angle) * radius,
+    canvas.height / 2 + Math.sin(angle) * radius
+  );
+  // Orient rune perpendicular to the radial spoke
+  ctx.rotate(angle + Math.PI / 2);
+
+  ctx.strokeStyle = '#E63946'; // Crimson
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#FF2A54'; // Scarlet glow
+  ctx.shadowBlur = 6;
+
+  for (const [x1, y1, x2, y2] of strokes) {
+    ctx.beginPath();
+    ctx.moveTo((x1 - 0.5) * size, (y1 - 0.5) * -size);
+    ctx.lineTo((x2 - 0.5) * size, (y2 - 0.5) * -size);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+```
+
+### Visual & Practical Value
+
+1. **Aesthetic Identity:** Anyone looking at your desktop screen sees a glowing crimson runic magic circle rather than an ordinary black-and-white square barcode.
+2. **Deterministic Geometry:** Because each letter is composed strictly of lines between points on a 3×3 matrix, the mobile app's computer vision pipeline can decode runes with basic line-detection (Hough Line Transform) even under uneven lighting.
+3. **Payload Verification:** The outer rune ring spells out the SHA-256 hash checksum of the session connection string, allowing instant visual validation that the connection has not been intercepted.

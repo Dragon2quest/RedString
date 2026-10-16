@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Magic Circle & Arcane Script</title>
+    <style>
+        body {
+            background-color: #050505;
+            color: #ff3366;
+            font-family: 'Cinzel', serif, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: transparent;
+            /* subtle radial glow behind the canvas */
+            box-shadow: 0 0 100px rgba(255, 51, 102, 0.1) inset;
+            border-radius: 50%;
+            margin-bottom: 20px;
+            filter: drop-shadow(0 0 15px rgba(255, 0, 85, 0.5));
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+        input {
+            background: rgba(20, 10, 15, 0.8);
+            border: 1px solid #ff3366;
+            color: #ff3366;
+            padding: 12px 20px;
+            font-size: 18px;
+            width: 400px;
+            outline: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        button {
+            background: transparent;
+            border: 1px solid #ff3366;
+            color: #ff3366;
+            padding: 12px 30px;
+            font-size: 18px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #ff3366;
+            color: #000;
+            box-shadow: 0 0 20px #ff3366;
+        }
+        /* Background decorative elements */
+        .bg-glow {
+            position: absolute;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(255,0,85,0.1) 0%, rgba(0,0,0,0) 70%);
+            z-index: -1;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <canvas id="magicCircle" width="900" height="900"></canvas>
+    
+    <div class="controls">
+        <input type="text" id="runeInput" value="IGNIS AETERNUS" placeholder="Incant your phrase...">
+    </div>
+
+    <script>
+        const canvas = document.getElementById('magicCircle');
+        const ctx = canvas.getContext('2d');
+        let time = 0;
+
+        // ---------------------------------------------------
+        // ARCANE LANGUAGE GENERATOR (Procedural Syllabic Script)
+        // ---------------------------------------------------
+        // Instead of 1-to-1 English, we map letters to phonetic glyph components.
+        // Consonants define the main structure. Vowels add floating accents/rings.
+        
+        function hashChar(char) {
+            let h = 0;
+            for (let i = 0; i < char.length; i++) {
+                h = Math.imul(31, h) + char.charCodeAt(i) | 0;
+            }
+            return Math.abs(h);
+        }
+
+        // Procedural Glyph Drawer
+        function drawArcaneGlyph(ctx, char, size) {
+            const hash = hashChar(char);
+            const isVowel = ['A','E','I','O','U','Y'].includes(char);
+            
+            ctx.beginPath();
+            
+            // Random seeded by character
+            const pseudoRandom = (seed) => {
+                let x = Math.sin(hash + seed) * 10000;
+                return x - Math.floor(x);
+            };
+
+            const points = 3 + Math.floor(pseudoRandom(1) * 4); // 3 to 6 points
+            
+            if (isVowel) {
+                // Vowels are ethereal floating rings and dots
+                ctx.arc(0, 0, size * 0.4, 0, Math.PI * 2 * pseudoRandom(2));
+                if (pseudoRandom(3) > 0.5) {
+                    ctx.moveTo(0, -size * 0.6);
+                    ctx.lineTo(0, -size * 0.8);
+                }
+                ctx.moveTo(size * 0.2, 0);
+                ctx.arc(0, 0, size * 0.1, 0, Math.PI * 2);
+            } else {
+                // Consonants are sharp, sweeping geometric anchors
+                ctx.moveTo(0, -size * 0.8);
+                for (let i = 0; i < points; i++) {
+                    const angle = (i / points) * Math.PI * 2 + (pseudoRandom(i)*Math.PI);
+                    const r = size * (0.3 + pseudoRandom(i+10) * 0.7);
+                    
+                    if (pseudoRandom(i+20) > 0.5) {
+                        ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+                    } else {
+                        // Sweep curve
+                        const cpAngle = angle - 0.5;
+                        ctx.quadraticCurveTo(
+                            Math.cos(cpAngle) * size, Math.sin(cpAngle) * size,
+                            Math.cos(angle) * r, Math.sin(angle) * r
+                        );
+                    }
+                }
+                // Central core
+                if (pseudoRandom(4) > 0.3) {
+                    ctx.moveTo(0, -size * 0.2);
+                    ctx.lineTo(0, size * 0.2);
+                    ctx.moveTo(-size*0.2, 0);
+                    ctx.lineTo(size*0.2, 0);
+                }
+            }
+            ctx.stroke();
+            
+            // Add tiny accent dots for complexity
+            if (pseudoRandom(5) > 0.5) {
+                ctx.beginPath();
+                ctx.arc(size * 0.5, -size * 0.5, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // ---------------------------------------------------
+        // SACRED GEOMETRY (The Magic Circle Design)
+        // ---------------------------------------------------
+        
+        function drawPolygram(ctx, cx, cy, radius, points, skip) {
+            ctx.beginPath();
+            for (let i = 0; i <= points; i++) {
+                const a = (Math.PI * 2 / points) * ((i * skip) % points) - Math.PI / 2;
+                const x = cx + Math.cos(a) * radius;
+                const y = cy + Math.sin(a) * radius;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+
+        function drawOrbitalRunes(ctx, text, radius, size, rotationSpeed, flip=false) {
+            ctx.save();
+            ctx.rotate(time * rotationSpeed);
+            const chars = text.split('');
+            const angleStep = (Math.PI * 2) / chars.length;
+
+            ctx.strokeStyle = '#ff3366';
+            ctx.fillStyle = '#ff3366';
+            ctx.lineWidth = 1.5;
+
+            for (let i = 0; i < chars.length; i++) {
+                if (chars[i] === ' ') continue;
+                const angle = i * angleStep;
+                
+                ctx.save();
+                ctx.rotate(angle);
+                ctx.translate(0, -radius);
+                if (flip) ctx.rotate(Math.PI);
+                
+                drawArcaneGlyph(ctx, chars[i], size);
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+
+        function drawMagicCircle() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            ctx.save();
+            ctx.translate(cx, cy);
+
+            // Base glowing style
+            ctx.strokeStyle = '#ff0055';
+            ctx.shadowColor = '#ff3366';
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 1;
+
+            // 1. OUTER WARDING RINGS
+            ctx.beginPath(); ctx.arc(0, 0, 400, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(0, 0, 390, 0, Math.PI * 2); ctx.stroke();
+            
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(0, 0, 340, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 1;
+
+            // 2. INNER GEOMETRY (Slow counter-rotating Hexagram)
+            ctx.save();
+            ctx.rotate(time * -0.2);
+            drawPolygram(ctx, 0, 0, 340, 6, 2); // Hexagram (6 points, skip 2)
+            
+            // Inner circles at the points of the hexagram
+            for(let i=0; i<6; i++) {
+                const a = (Math.PI * 2 / 6) * i;
+                ctx.beginPath();
+                ctx.arc(Math.cos(a) * 340, Math.sin(a) * 340, 25, 0, Math.PI*2);
+                ctx.stroke();
+                // Tiny internal runic mark
+                ctx.save();
+                ctx.translate(Math.cos(a) * 340, Math.sin(a) * 340);
+                drawArcaneGlyph(ctx, String.fromCharCode(65+i), 10);
+                ctx.restore();
+            }
+            ctx.restore();
+
+            // 3. MIDDLE GEOMETRY (Fast rotating Heptagram)
+            ctx.save();
+            ctx.rotate(time * 0.3);
+            ctx.strokeStyle = 'rgba(255, 51, 102, 0.6)';
+            drawPolygram(ctx, 0, 0, 220, 7, 3); // Heptagram
+            ctx.beginPath(); ctx.arc(0, 0, 220, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+
+            // 4. THE CORE SEAL (Interlocking triangles)
+            ctx.save();
+            ctx.rotate(time * 0.5);
+            ctx.strokeStyle = '#ff0055';
+            drawPolygram(ctx, 0, 0, 100, 3, 1);
+            ctx.rotate(Math.PI);
+            drawPolygram(ctx, 0, 0, 100, 3, 1);
+            
+            // Deep core circle
+            ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+
+            // 5. THE RUNIC SCRIPT (The User's Incantation)
+            const text = document.getElementById('runeInput').value.trim().toUpperCase() || "VOID";
+            
+            // Outer Ring Text (Forward rotation)
+            drawOrbitalRunes(ctx, text, 365, 20, 0.4, false);
+            
+            // Inner Ring Text (Reverse rotation, mirrored, faster)
+            drawOrbitalRunes(ctx, text.split('').reverse().join(''), 160, 15, -0.6, true);
+
+            // Core Ring Text (Very slow)
+            drawOrbitalRunes(ctx, "POWER BIND SEAL", 70, 10, 0.1, false);
+
+            ctx.restore();
+        }
+
+        // Animation Loop
+        function render() {
+            time += 0.01;
+            drawMagicCircle();
+            requestAnimationFrame(render);
+        }
+        render();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RED STRING | P2P Fabric</title>
+    <!-- Fonts with offline fallbacks -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --red: #ff003c;
+            --red-glow: #ff1a66;
+            --red-deep: #7a001a;
+            --bg: #030305;
+            --card-bg: rgba(14, 14, 22, 0.45);
+            --text-main: #ffffff;
+            --text-muted: #888899;
+            --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+            --font-serif: 'Cinzel', 'Cinzel Decorative', 'Georgia', 'Times New Roman', serif;
+        }
+
+        html {
+            background-color: var(--bg);
+            scroll-behavior: smooth;
+        }
+        body {
+            margin: 0; 
+            padding: 0;
+            background-color: transparent;
+            color: var(--text-main);
+            font-family: var(--font-mono);
+            font-size: 14px;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 3D Canvas fixed at the very back */
+        #webgl-container {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* Vignette / scanline overlay */
+        .overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: 1;
+            pointer-events: none;
+            background: radial-gradient(circle at center, transparent 0%, rgba(3,3,5,0.88) 100%),
+                        linear-gradient(to bottom, rgba(255,255,255,0) 50%, rgba(0,0,0,0.18) 50%);
+            background-size: 100% 100%, 100% 4px;
+        }
+
+        /* ========================================================
+           ARCANE RITUAL BOOT LOADER & TRANSITION SYSTEM
+           ======================================================== */
+        #ritual-loader {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: #020205;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+                        filter 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+                        transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: auto;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        #ritual-loader.unlocked {
+            opacity: 0;
+            filter: blur(20px);
+            transform: scale(1.1);
+            pointer-events: none;
+        }
+
+        .loader-bg-ambient {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,0,60,0.18) 0%, transparent 70%);
+            pointer-events: none;
+            animation: ritualAura 4s ease-in-out infinite;
+        }
+
+        .loader-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .ritual-ring-wrapper {
+            position: relative;
+            width: 190px;
+            height: 190px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ritual-svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 16px rgba(255, 0, 60, 0.75));
+        }
+
+        .ring-outer {
+            fill: none;
+            stroke: #ff003c;
+            stroke-width: 1.5;
+            transform-origin: 150px 150px;
+            animation: ritualSpinCW 24s linear infinite;
+        }
+
+        .ring-dash {
+            fill: none;
+            stroke: #ffffff;
+            stroke-width: 1.2;
+            stroke-dasharray: 6 12;
+            opacity: 0.7;
+            transform-origin: 150px 150px;
+            animation: ritualSpinCCW 14s linear infinite;
+        }
+
+        .ring-inner {
+            fill: none;
+            stroke: #ff003c;
+            stroke-width: 2;
+            transform-origin: 150px 150px;
+            animation: ritualSpinCW 8s linear infinite;
+        }
+
+        .ritual-triangle {
+            fill: none;
+            stroke: #ff1a66;
+            stroke-width: 1.5;
+            transform-origin: 150px 150px;
+        }
+        .trig-1 { animation: ritualPulseTrig 3s ease-in-out infinite alternate; }
+        .trig-2 { animation: ritualPulseTrig 3s ease-in-out infinite alternate 1.5s; }
+
+        .core-eye {
+            fill: #ff003c;
+            opacity: 0.9;
+            transform-origin: 150px 150px;
+            animation: ritualHeartbeat 1.6s ease-in-out infinite;
+        }
+
+        @keyframes ritualSpinCW { 100% { transform: rotate(360deg); } }
+        @keyframes ritualSpinCCW { 100% { transform: rotate(-360deg); } }
+        @keyframes ritualHeartbeat {
+            0%, 100% { transform: scale(0.85); opacity: 0.6; }
+            50% { transform: scale(1.2); opacity: 1; }
+        }
+        @keyframes ritualAura {
+            0%, 100% { transform: scale(0.9); opacity: 0.25; }
+            50% { transform: scale(1.25); opacity: 0.6; }
+        }
+        @keyframes ritualPulseTrig {
+            0% { transform: scale(0.96) rotate(0deg); opacity: 0.5; }
+            100% { transform: scale(1.04) rotate(4deg); opacity: 1; }
+        }
+
+        .loader-text-group {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            max-width: 480px;
+        }
+
+        .loader-title {
+            font-family: var(--font-serif);
+            font-size: 18px;
+            letter-spacing: 7px;
+            color: #ffffff;
+            text-shadow: 0 0 18px rgba(255, 0, 60, 0.85);
+            font-weight: 700;
+        }
+
+        .loader-status {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--red);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            min-height: 18px;
+        }
+
+        .loader-progress-bar {
+            width: 300px;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+            margin-top: 4px;
+        }
+
+        .loader-progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff003c, #ffffff);
+            box-shadow: 0 0 12px #ff003c;
+            transition: width 0.15s ease-out;
+        }
+
+        .loader-log {
+            margin-top: 6px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: #888899;
+            letter-spacing: 1px;
+            max-width: 440px;
+            min-height: 32px;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .loader-bypass-hint {
+            font-size: 9px;
+            color: #555566;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
+        /* SCROLLABLE CONTENT WRAPPER */
+        #scroll-content {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+        }
+
+        /* Hero Section */
+        .hero-section {
+            width: 100%; 
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 3vw 4vw;
+            box-sizing: border-box;
+            opacity: 0;
+            transform: translateY(15px);
+            transition: opacity 1.3s cubic-bezier(0.16, 1, 0.3, 1), transform 1.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .hero-section.revealed {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .row { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; }
+        .row.bottom { align-items: flex-end; }
+
+        h1 {
+            font-family: var(--font-serif);
+            font-size: clamp(38px, 6vw, 78px);
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0 0 10px 0;
+            letter-spacing: 0.15em;
+            text-shadow: 0 0 30px rgba(255, 26, 102, 0.8), 0 0 10px rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+        }
+
+        .subtext { color: var(--text-muted); line-height: 1.6; font-size: 13px; }
+        
+        .manifesto { text-align: right; max-width: 400px; }
+        .manifesto h3 { margin: 0 0 15px 0; font-size: 12px; font-weight: 700; letter-spacing: 4px; color: var(--red); text-transform: uppercase; }
+        .manifesto p { margin: 0; color: #aaaaaa; line-height: 1.8; text-align: justify; font-size: 13px;}
+
+        .btn {
+            background: rgba(15, 15, 20, 0.65);
+            border: 1px solid var(--red);
+            color: var(--text-main);
+            padding: 16px 36px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .btn::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,0,60,0.4), transparent);
+            transition: all 0.5s;
+        }
+        .btn:hover::before { left: 100%; }
+        .btn:hover { background: rgba(255,0,60,0.18); box-shadow: 0 0 35px rgba(255,0,60,0.45); border-color: #ff3366; text-shadow: 0 0 10px #fff; }
+
+        .sound-toggle { cursor: pointer; color: var(--text-muted); display: inline-flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; transition: color 0.3s;}
+        .sound-toggle:hover, .sound-toggle.active { color: var(--red); text-shadow: 0 0 10px var(--red); }
+        .ring { font-size: 14px; animation: spin 3s linear infinite; display: inline-block; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 3vh;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            opacity: 0.7;
+            animation: bounce 2s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .scroll-indicator span { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--text-muted); }
+        .scroll-indicator .line { width: 1px; height: 35px; background: linear-gradient(to bottom, var(--red), transparent); }
+        @keyframes bounce { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 8px); } }
+
+        /* Sections */
+        .artifacts-section, .deck-section {
+            width: 100%; 
+            padding: 12vh 6vw;
+            box-sizing: border-box;
+            background: transparent;
+            position: relative;
+        }
+
+        .section-title {
+            font-family: var(--font-serif); 
+            font-size: clamp(28px, 4vw, 48px); 
+            color: #ffffff; 
+            margin-bottom: 70px; 
+            text-shadow: 0 0 25px var(--red-glow); 
+            text-align: center;
+            letter-spacing: 0.2em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 35px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .glass-panel {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.16);
+            border-left: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            border-radius: 16px;
+        }
+
+        .card {
+            padding: 45px 35px; 
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            background: var(--card-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        .card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 2px; height: 0; background: var(--red); transition: height 0.4s;
+        }
+        .card:hover::before { height: 100%; }
+        .card:hover { transform: translateY(-8px); border-color: rgba(255, 0, 60, 0.45); background: rgba(255,255,255,0.06); box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 25px rgba(255,0,60,0.25); }
+        .card h3 { color: var(--text-main); margin-top: 0; font-family: var(--font-serif); font-size: 24px; letter-spacing: 3px; text-shadow: 0 0 10px rgba(255,255,255,0.2);}
+        .card p { color: #aaaaaa; line-height: 1.8; font-size: 13px;}
+        .card .number { position: absolute; top: 20px; right: 25px; font-family: var(--font-serif); font-size: 55px; color: rgba(255,255,255,0.05); font-weight: 700; user-select: none;}
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border: 1px solid rgba(255,0,60,0.3);
+            background: rgba(255,0,60,0.08);
+            color: #fff;
+        }
+        .status-badge .dot {
+            width: 8px; height: 8px; border-radius: 50%; background: #00ff66; box-shadow: 0 0 10px #00ff66;
+            animation: pulseDot 2s infinite;
+        }
+        @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        .terminal-box {
+            background: rgba(2, 2, 5, 0.75);
+            border: 1px solid rgba(255, 0, 60, 0.25);
+            padding: 16px;
+            border-radius: 8px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: #aaddff;
+            height: 120px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
+        .deep-space {
+            height: 50vh;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .deep-space h2 { font-family: var(--font-serif); letter-spacing: 10px; color: #333; font-size: 18px; text-shadow: 0 0 5px rgba(255,255,255,0.05); }
+
+    </style>
+
+    <!-- LOCAL VENDOR IMPORT MAP (100% OFFLINE CAPABLE) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./vendor/three/build/three.module.js",
+                "three/addons/": "./vendor/three/addons/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <!-- OCCULT CYBERNETIC RITUAL LOADER -->
+    <div id="ritual-loader" title="Click to enter directly">
+        <div class="loader-bg-ambient"></div>
+        <div class="loader-center">
+            <div class="ritual-ring-wrapper">
+                <svg class="ritual-svg" viewBox="0 0 300 300">
+                    <circle cx="150" cy="150" r="140" class="ring-outer" />
+                    <circle cx="150" cy="150" r="122" class="ring-dash" />
+                    <circle cx="150" cy="150" r="98" class="ring-inner" />
+                    <polygon points="150,52 235,198 65,198" class="ritual-triangle trig-1" />
+                    <polygon points="150,248 235,102 65,102" class="ritual-triangle trig-2" />
+                    <circle cx="150" cy="150" r="32" class="core-eye" />
+                </svg>
+            </div>
+
+            <div class="loader-text-group">
+                <div class="loader-title">RED STRING // CORE WEAVE</div>
+                <div class="loader-status" id="loader-status-text">INITIALIZING NODUS FABRIC...</div>
+                <div class="loader-progress-bar">
+                    <div class="loader-progress-fill" id="loader-progress"></div>
+                </div>
+                <div class="loader-log" id="loader-terminal-log">
+                    > [0.012s] BOOTING LOCAL P2P KERNEL...
+                </div>
+                <div class="loader-bypass-hint">[ CLICK ANYWHERE TO ENTER DIRECTLY ]</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3D Canvas fixed at the back -->
+    <div id="webgl-container"></div>
+    <div class="overlay"></div>
+
+    <!-- Scrollable Content -->
+    <div id="scroll-content">
+        
+        <!-- Hero Section -->
+        <div class="hero-section" id="ui">
+            <!-- Top Row -->
+            <div class="row">
+                <div>
+                    <h1>RED STRING</h1>
+                    <div class="subtext">
+                        // Direct P2P Mesh Fabric<br>
+                        Zero Cloud. Zero Relays. Fully Autonomous.<br>
+                        <div style="margin-top: 12px;">
+                            <span class="status-badge"><span class="dot"></span> FABRIC READY (LAN / OFFLINE)</span>
+                        </div>
+                        <div id="pairing-token" style="color: var(--red); font-weight: bold; margin-top: 15px; font-size: 15px; text-shadow: 0 0 10px rgba(255,0,60,0.5);">
+                            [ BINDING LISTENER: PORT 7788 ]
+                        </div>
+                        <div id="connect-terminal" style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <span style="color: var(--red); font-size: 16px;">></span>
+                            <input type="text" id="peer-ip-input" placeholder="PEER IP (e.g. 192.168.1.5)..." style="background: rgba(0,0,0,0.6); border: 1px solid rgba(255,0,60,0.4); color: #fff; padding: 10px 15px; font-family: var(--font-mono); font-size: 13px; width: 220px; outline: none; border-radius: 4px; transition: all 0.3s;" onfocus="this.style.borderColor='#ff003c'; this.style.boxShadow='0 0 15px rgba(255,0,60,0.4)';" onblur="this.style.borderColor='rgba(255,0,60,0.4)'; this.style.boxShadow='none';">
+                            <button id="connect-btn" class="btn" style="padding: 10px 22px; font-size: 11px;">WEAVE THREAD</button>
+                        </div>
+                        <div id="connect-status" style="margin-top: 10px; font-size: 11px; color: var(--text-muted);"></div>
+                    </div>
+                </div>
+                <div class="manifesto">
+                    <h3>////// The Autonomous Manifesto</h3>
+                    <p>Decouple communication from centralized data silos. A pure cryptographic thread woven directly across your machines over raw TCP. Untraceable, sovereign, and unbroken with or without internet.</p>
+                </div>
+            </div>
+
+            <!-- Bottom Row -->
+            <div class="row bottom">
+                <div>
+                    <div class="sound-toggle" id="soundBtn">
+                        <span class="ring">(())</span> Arcane Drone: <span id="sound-state">OFF</span>
+                    </div>
+                </div>
+                <div>
+                    <a href="#live-deck" style="text-decoration: none;">
+                        <button class="btn">[ ENTER TRANSMISSION DECK ]</button>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="scroll-indicator">
+                <span>Scroll to descend</span>
+                <div class="line"></div>
+            </div>
+        </div>
+
+        <!-- NEW: LIVE INTERACTIVE TRANSMISSION DECK -->
+        <div class="deck-section" id="live-deck">
+            <h2 class="section-title">LIVE FABRIC DECK</h2>
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));">
+                
+                <!-- Deck 1: Live Fate Watch Simulator -->
+                <div class="card">
+                    <div class="number">LIVE</div>
+                    <h3>Fate Watch Delta Stream</h3>
+                    <p>Character-level live telemetry mirroring. Keystrokes generate instantaneous 5-byte framed delta packets over the woven socket.</p>
+                    <div style="margin-top: 20px;">
+                        <input type="text" id="fate-watch-input" placeholder="Type here to stream live deltas..." style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,0,60,0.3); color: #fff; padding: 12px; font-family: var(--font-mono); font-size: 13px; outline: none; border-radius: 6px;">
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 1px;">TELEMETRY STREAM:</div>
+                        <div class="terminal-box" id="fate-watch-terminal">[0x01 TEXT] Stream idle. Type above to broadcast delta frames.</div>
+                    </div>
+                </div>
+
+                <!-- Deck 2: Platform Elastic Buffer Gauge -->
+                <div class="card">
+                    <div class="number">115%</div>
+                    <h3>Platform Elastic Buffer</h3>
+                    <p>Dual-boundary memory ceiling. A 1024 MB baseline heap with a +15% elastic margin absorbs burst transmissions without drops.</p>
+                    <div style="margin-top: 25px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px;">
+                            <span>Active Usage: <strong id="buffer-usage-label" style="color: #00ff66;">450 MB</strong></span>
+                            <span id="buffer-status-badge" style="color: #00ff66;">[ NORMAL ]</span>
+                        </div>
+                        <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; position: relative;">
+                            <div id="buffer-bar-fill" style="width: 38%; height: 100%; background: #00ff66; transition: all 0.3s;"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 6px;">
+                            <span>0 MB</span>
+                            <span style="color: #ffaa00;">1024 MB (Soft)</span>
+                            <span style="color: #ff003c;">1177 MB (+15% Hard)</span>
+                        </div>
+                        <div style="margin-top: 20px;">
+                            <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 8px;">SIMULATE INCOMING ARTIFACT PAYLOAD:</label>
+                            <input type="range" id="buffer-test-slider" min="100" max="1400" step="25" value="450" style="width: 100%; cursor: pointer;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deck 3: Nodus-V1 Runic Cipher Live -->
+                <div class="card">
+                    <div class="number">KNOT</div>
+                    <h3>Nodus-V1 Rune Encoder</h3>
+                    <p>Sacred 3×3 compass radial cipher. Obfuscates session tokens into geometric knot glyphs across the orbital magic circle.</p>
+                    <div style="margin-top: 15px;">
+                        <input type="text" id="rune-word-input" value="RED STRING" maxlength="15" placeholder="Enter word to encode..." style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,0,60,0.3); color: #fff; padding: 10px; font-family: var(--font-mono); font-size: 12px; outline: none; border-radius: 6px; text-transform: uppercase;">
+                    </div>
+                    <div style="margin-top: 15px; display: flex; justify-content: center;">
+                        <canvas id="rune-live-canvas" width="340" height="80" style="background: rgba(0,0,0,0.4); border-radius: 6px; border: 1px solid rgba(255,0,60,0.2);"></canvas>
+                    </div>
+                </div>
+
+                <!-- Deck 4: Zero-Trust Telemetry & Edge Anomaly Engine -->
+                <div class="card" style="border-color: rgba(0, 245, 155, 0.4); box-shadow: 0 0 20px rgba(0, 245, 155, 0.1);">
+                    <div class="number" style="color: #00f59b;">&lt;1.4ms</div>
+                    <h3 style="color: #00f59b;">Zero-Trust Edge Intrusion Engine</h3>
+                    <p>IBM Enterprise Datathon Architecture. Non-invasive statistical kinetics (O(1) Shannon entropy &amp; &Delta;t) with cold-booted IsolationForest quarantine boundary.</p>
+                    <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(0,245,155,0.2);">
+                            <span>FRAME HEADER:</span>
+                            <strong style="color: #fff;">17-Byte RDSG Binary Wire</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(0,245,155,0.2);">
+                            <span>INFERENCE LATENCY:</span>
+                            <strong style="color: #00f59b;">0.438 ms (Budget &lt; 1.4ms)</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(0,245,155,0.2);">
+                            <span>CLOUD LEAKAGE:</span>
+                            <strong style="color: #00f59b;">0 Bytes (Air-Gapped)</strong>
+                        </div>
+                        <a href="http://localhost:8501" target="_blank" style="text-decoration: none; margin-top: 6px;">
+                            <button class="btn" style="width: 100%; border-color: #00f59b; color: #00f59b; padding: 10px; font-size: 11px;">[ LAUNCH SECURITY CONSOLE ]</button>
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Artifacts Section -->
+        <div class="artifacts-section">
+            <h2 class="section-title">THE THREE PILLARS</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="number">01</div>
+                    <h3>The Platform</h3>
+                    <p>Shared Vault Dropzone. Dual-tier memory boundary with soft limits and elastic flex zones to prevent transfer failure across disparate nodes.</p>
+                </div>
+                <div class="card">
+                    <div class="number">02</div>
+                    <h3>Fate Sync</h3>
+                    <p>Real-time interactive messaging with zero server intermediates. Hot clipboard sync with cryptographic acknowledgment and ephemeral state.</p>
+                </div>
+                <div class="card">
+                    <div class="number">03</div>
+                    <h3>Fate Watch</h3>
+                    <p>Keystroke-by-keystroke live telemetry mirroring. Minimal delta transmission for absolute zero-latency feeds across the global string.</p>
+                </div>
+            </div>
+
+            <!-- The Knot-Cipher Architectural Description -->
+            <div style="margin-top: 12vh; border-top: 1px solid rgba(255,0,60,0.2); padding-top: 8vh; max-width: 1400px; margin-left: auto; margin-right: auto;">
+                <div class="row" style="align-items: center; flex-wrap: wrap; gap: 40px;">
+                    <div style="flex: 1; min-width: 300px; padding-right: 2vw;">
+                        <h2 class="section-title" style="text-align: left; margin-bottom: 25px; font-size: clamp(24px, 3vw, 40px);">THE KNOT-CIPHER</h2>
+                        <h3 style="color: var(--red); font-family: var(--font-serif); letter-spacing: 4px; font-size: 15px; margin-bottom: 20px;">NODUS-V1 ALGORITHMIC LANGUAGE</h3>
+                        <p style="color: #9999aa; line-height: 1.8; font-size: 14px; margin-bottom: 25px;">
+                            Every glyph in the RED STRING fabric is rendered from an immutable 3×3 sacred grid using standard compass radials. This enables the platform to project runes along orbital rings, functioning as a cryptographic substitution lattice.
+                        </p>
+                        <p style="color: #9999aa; line-height: 1.8; font-size: 14px;">
+                            The Secret Key is generated per session using 256-bit entropy. The radial salt mutates dynamically based on orbital angle (θ), resisting local packet sniffing.
+                        </p>
+                    </div>
+                    <div style="flex: 1; display: flex; justify-content: center; min-width: 280px;">
+                        <div style="width: 280px; height: 280px; border: 1px solid rgba(255,0,60,0.35); position: relative; background: rgba(10,10,15,0.6); backdrop-filter: blur(5px); border-radius: 10px;">
+                            <div style="position: absolute; top: 16%; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.1);"></div>
+                            <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.1);"></div>
+                            <div style="position: absolute; top: 84%; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.1);"></div>
+                            <div style="position: absolute; left: 16%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.1);"></div>
+                            <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.1);"></div>
+                            <div style="position: absolute; left: 84%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.1);"></div>
+                            
+                            <!-- Red "R" Rune on grid -->
+                            <svg width="280" height="280" style="position: absolute; top: 0; left: 0;">
+                                <polyline points="45,235 45,45 235,45 235,140 45,140" fill="none" stroke="#ff003c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+                                <polyline points="45,140 235,235" fill="none" stroke="#ff003c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+                                
+                                <circle cx="45" cy="235" r="5" fill="#fff" />
+                                <circle cx="45" cy="45" r="5" fill="#fff" />
+                                <circle cx="235" cy="45" r="5" fill="#fff" />
+                                <circle cx="235" cy="140" r="5" fill="#fff" />
+                                <circle cx="45" cy="140" r="5" fill="#fff" />
+                                <circle cx="235" cy="235" r="5" fill="#fff" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Section 3: Magic Circle Playground -->
+        <div class="playground-section glass-panel" style="margin-top: 10vh; margin-left: 4vw; margin-right: 4vw; padding: 8vh 4vw; position: relative; z-index: 10;">
+            <div style="max-width: 1400px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 60px; align-items: center;">
+                <div style="flex: 1; min-width: 320px;">
+                    <h2 class="section-title" style="text-align: left; font-size: clamp(24px, 3vw, 40px); margin-bottom: 20px;">RITUAL QR GENERATOR</h2>
+                    <h3 style="color: var(--red); font-family: var(--font-serif); letter-spacing: 4px; font-size: 15px; margin-bottom: 20px;">DYNAMIC VISUAL ENCRYPTION</h3>
+                    <p style="color: #9999aa; line-height: 1.8; font-size: 14px; margin-bottom: 35px;">
+                        Adjust the platform capacity slider below. As the memory buffer scales from 512 MB to 5.0 GB, the required geometric complexity of the connection seed increases. Watch the Knot-Script and inner geometry adapt its density in real-time.
+                    </p>
+                    
+                    <div class="slider-container card" style="padding: 30px;">
+                        <label for="capacity-slider" style="display: flex; justify-content: space-between; font-family: var(--font-mono); color: var(--text-main); font-size: 13px; font-weight: bold; margin-bottom: 18px; text-transform: uppercase; letter-spacing: 2px;">
+                            <span>Buffer Capacity:</span>
+                            <span id="capacity-value" style="color: var(--red);">1.0 GB</span>
+                        </label>
+                        <input type="range" id="capacity-slider" min="0.5" max="5.0" step="0.1" value="1.0" style="width: 100%; cursor: pointer;">
+                        
+                        <div style="margin-top: 18px; display: flex; justify-content: space-between; color: #aaaaaa; font-family: var(--font-mono); font-size: 10px;">
+                            <span>512 MB</span>
+                            <span>5.0 GB</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="flex: 1; display: flex; justify-content: center; min-width: 320px;">
+                    <div style="position: relative; width: 440px; height: 440px; display: flex; justify-content: center; align-items: center; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);">
+                        <canvas id="playground-canvas" width="440" height="440" style="max-width: 100%; height: auto; filter: drop-shadow(0 0 18px rgba(255,0,60,0.65)); animation: spin 45s linear infinite;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Downloads -->
+        <div class="downloads-section" style="padding: 12vh 4vw; position: relative; z-index: 10; background: transparent;">
+            <h2 class="section-title">DEPLOY THE THREAD</h2>
+            <p style="text-align: center; color: #aaaaaa; font-family: var(--font-mono); margin-top: -50px; margin-bottom: 70px; text-transform: uppercase; letter-spacing: 2px;">Choose your vessel. Zero setup. Direct peer execution.</p>
+            
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                <div class="card" style="text-align: center;">
+                    <h3 style="font-size: 22px; color: #fff;">DESKTOP CORE</h3>
+                    <p style="font-family: var(--font-mono); color: var(--red); font-size: 12px; margin-bottom: 25px; letter-spacing: 2px;">(Rust + Tauri)</p>
+                    <ul style="list-style: none; padding: 0; color: #cccccc; font-size: 13px; line-height: 2.4; margin-bottom: 35px; text-align: left; display: inline-block; font-family: var(--font-mono);">
+                        <li><span style="color: var(--red);">></span> Windows (.msi / .exe)</li>
+                        <li><span style="color: var(--red);">></span> macOS Universal (.dmg)</li>
+                        <li><span style="color: var(--red);">></span> Linux Standalone (.AppImage)</li>
+                    </ul>
+                    <button class="btn" style="width: 100%; font-size: 11px; padding: 16px 0;">[ ACTIVE CLIENT ]</button>
+                </div>
+                <div class="card" style="text-align: center;">
+                    <h3 style="font-size: 22px; color: #fff;">MOBILE VESSEL</h3>
+                    <p style="font-family: var(--font-mono); color: var(--red); font-size: 12px; margin-bottom: 25px; letter-spacing: 2px;">(Flutter Companion)</p>
+                    <ul style="list-style: none; padding: 0; color: #cccccc; font-size: 13px; line-height: 2.4; margin-bottom: 35px; text-align: left; display: inline-block; font-family: var(--font-mono);">
+                        <li><span style="color: var(--red);">></span> Android Companion (.apk)</li>
+                        <li><span style="color: var(--red);">></span> iOS AirDrop Mesh (.ipa)</li>
+                        <li><span style="color: var(--red);">></span> QR Magic Pairing</li>
+                    </ul>
+                    <button class="btn" style="width: 100%; font-size: 11px; padding: 16px 0;">[ PAIR COMPANION ]</button>
+                </div>
+                <div class="card" style="text-align: center;">
+                    <h3 style="font-size: 22px; color: #fff;">COLD VAULT</h3>
+                    <p style="font-family: var(--font-mono); color: var(--red); font-size: 12px; margin-bottom: 25px; letter-spacing: 2px;">(Hardware Key)</p>
+                    <ul style="list-style: none; padding: 0; color: #cccccc; font-size: 13px; line-height: 2.4; margin-bottom: 35px; text-align: left; display: inline-block; font-family: var(--font-mono);">
+                        <li><span style="color: var(--red);">></span> USB Standalone Binary</li>
+                        <li><span style="color: var(--red);">></span> Isolated Local Cache</li>
+                        <li><span style="color: var(--red);">></span> Hardware Air-Gap</li>
+                    </ul>
+                    <button class="btn" style="width: 100%; font-size: 11px; padding: 16px 0;">[ PREVIEW KEY ]</button>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 70px;">
+                <p style="font-family: var(--font-mono); font-size: 11px; color: #777788; letter-spacing: 1px;">SHA-256 Checksum: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</p>
+            </div>
+        </div>
+        
+        <div class="deep-space">
+            <h2>END OF TRANSMISSION</h2>
+            <div style="width: 1px; height: 120px; background: linear-gradient(to bottom, var(--red), transparent); margin-top: 15px; box-shadow: 0 0 15px var(--red);"></div>
+        </div>
+
+    </div>
+
+    <!-- SYNCHRONOUS BOOTLOADER & LIVE DECK CONTROLLER (RUNS INSTANTLY) -->
+    <script>
+        const RUNE_DICT = {
+            'R': ["0,0-0,2-2,2-2,1-0,1", "0,1-2,0"],
+            'E': ["2,2-0,2-0,0-2,0", "0,1-1,1"],
+            'D': ["0,0-0,2-2,1-0,0"],
+            'S': ["2,2-0,2-0,1-2,1-2,0-0,0"],
+            'T': ["0,2-2,2", "1,2-1,0"],
+            'I': ["1,0-1,2", "0,2-2,2", "0,0-2,0"],
+            'N': ["0,0-0,2-2,0-2,2"],
+            'G': ["2,2-0,2-0,0-2,0-2,1-1,1"],
+            'P': ["0,0-0,2-2,2-2,1-0,1"],
+            '2': ["0,2-2,2-2,1-0,1-0,0-2,0"],
+            'F': ["0,0-0,2", "0,2-2,2", "0,1-1,1"],
+            'A': ["0,0-1,2-2,0", "0,1-2,1"],
+            'B': ["0,0-0,2", "0,2-1,2-1,1-0,1", "0,1-1,1-1,0-0,0"],
+            'C': ["2,2-0,2-0,0-2,0"],
+            'O': ["0,0-0,2-2,2-2,0-0,0"],
+            'M': ["0,0-0,2-1,1-2,2-2,0"],
+            'U': ["0,2-0,0-2,0-2,2"],
+            'H': ["0,0-0,2", "2,0-2,2", "0,1-2,1"],
+            'W': ["0,2-0,0-1,1-2,0-2,2"],
+            'L': ["0,2-0,0-2,0"]
+        };
+
+        const loaderEl = document.getElementById('ritual-loader');
+        const statusTextEl = document.getElementById('loader-status-text');
+        const progressFillEl = document.getElementById('loader-progress');
+        const terminalLogEl = document.getElementById('loader-terminal-log');
+        const heroUiEl = document.getElementById('ui');
+
+        function unlockNow() {
+            if (loaderEl && !loaderEl.classList.contains('unlocked')) {
+                loaderEl.classList.add('unlocked');
+                if (heroUiEl) heroUiEl.classList.add('revealed');
+                fetchLocalNetworkInfo();
+            }
+        }
+
+        if (loaderEl) {
+            loaderEl.addEventListener('click', unlockNow);
+        }
+        window.addEventListener('keydown', unlockNow);
+
+        const bootSequence = [
+            { pct: 20, text: "CALIBRATING LOCAL PROTOCOL...", log: "> [0.015s] RAW TCP SOCKET INITIALIZED (PORT 7788)" },
+            { pct: 45, text: "SEEDING 256-BIT NODUS RUNES...", log: "> [0.120s] CRYPTOGRAPHIC KNOT-CIPHER LATTICE LOCKED" },
+            { pct: 70, text: "ALLOCATING PLATFORM BUFFER...", log: "> [0.285s] PLATFORM HEAP: 1024 MB (+15% ELASTIC FLEX)" },
+            { pct: 90, text: "WEAVING 3D MONOLITH & STRING...", log: "> [0.450s] DIMENSIONAL PARTICLES & STRINGS SYNCHRONIZED" },
+            { pct: 100, text: "MAGIC CIRCLE AWAKENED", log: "> [0.650s] PEER FABRIC READY. DIMENSIONAL APERTURE OPENED." }
+        ];
+
+        let bootIndex = 0;
+        function runBootStep() {
+            if (bootIndex < bootSequence.length) {
+                const step = bootSequence[bootIndex];
+                if (progressFillEl) progressFillEl.style.width = step.pct + '%';
+                if (statusTextEl) statusTextEl.innerText = step.text;
+                if (terminalLogEl) terminalLogEl.innerText = step.log;
+                bootIndex++;
+                setTimeout(runBootStep, 150);
+            } else {
+                setTimeout(unlockNow, 200);
+            }
+        }
+
+        // Guaranteed unlock timer (max 1.5s) so it NEVER gets stuck
+        setTimeout(unlockNow, 1400);
+        runBootStep();
+
+        function fetchLocalNetworkInfo() {
+            if (window.__TAURI__) {
+                window.__TAURI__.core.invoke('get_local_ip').then(function(ip) {
+                    var cleanIp = ip && ip !== "127.0.0.1" ? ip : "127.0.0.1 (Local Loop)";
+                    document.getElementById('pairing-token').innerHTML = 'YOUR PEER IP: <span style="color:#fff">' + cleanIp + ':7788</span><br><span style="font-size:12px;color:#888;">READY FOR PEER CONNECTIONS OVER LAN</span>';
+                }).catch(function(e) {
+                    document.getElementById('pairing-token').innerHTML = 'LOCAL THREAD: <span style="color:#fff">0.0.0.0:7788</span><br><span style="font-size:12px;color:#888;">LISTENING ON ALL LOCAL ADAPTERS</span>';
+                });
+
+                var connectBtn = document.getElementById('connect-btn');
+                if (connectBtn) {
+                    connectBtn.addEventListener('click', function() {
+                        var peerIp = document.getElementById('peer-ip-input').value.trim();
+                        if (peerIp) {
+                            var statusEl = document.getElementById('connect-status');
+                            statusEl.innerText = "[*] WEAVING OUTBOUND THREAD TO " + peerIp + "...";
+                            statusEl.style.color = "var(--red)";
+                            window.__TAURI__.core.invoke('connect_to_peer', { ip: peerIp }).then(function(msg) {
+                                statusEl.innerText = "[+] " + msg;
+                                statusEl.style.color = "#00ff66";
+                            }).catch(function(err) {
+                                statusEl.innerText = "[-] " + err;
+                                statusEl.style.color = "#ff3366";
+                            });
+                        }
+                    });
+                }
+            } else {
+                var pt = document.getElementById('pairing-token');
+                if (pt) pt.innerHTML = 'LOCAL DAEMON: <span style="color:#fff">0.0.0.0:7788</span><br><span style="font-size:12px;color:#888;">PEER WEAVE ACTIVE (OFFLINE CAPABLE)</span>';
+            }
+        }
+
+        // Live Fate Watch Simulator
+        var fateInput = document.getElementById('fate-watch-input');
+        var fateTerminal = document.getElementById('fate-watch-terminal');
+        var fateLogCount = 0;
+        if (fateInput && fateTerminal) {
+            fateInput.addEventListener('input', function(e) {
+                var val = e.target.value;
+                var lastChar = val.slice(-1) || ' ';
+                fateLogCount++;
+                var frameHex = "0x01 [TEXT]";
+                var packetLen = (new TextEncoder().encode(val)).length;
+                var logLine = '[FRAME #' + fateLogCount.toString().padStart(3, '0') + '] ' + frameHex + ' len: ' + packetLen + 'B | DELTA: \'' + lastChar + '\' | STATUS: ACK';
+                fateTerminal.innerText = logLine + "\n" + fateTerminal.innerText.slice(0, 380);
+            });
+        }
+
+        // Platform Elastic Buffer Interactive Gauge
+        var bufferSlider = document.getElementById('buffer-test-slider');
+        var bufferUsageLabel = document.getElementById('buffer-usage-label');
+        var bufferStatusBadge = document.getElementById('buffer-status-badge');
+        var bufferBarFill = document.getElementById('buffer-bar-fill');
+        if (bufferSlider && bufferUsageLabel && bufferBarFill) {
+            bufferSlider.addEventListener('input', function(e) {
+                var mb = parseInt(e.target.value);
+                bufferUsageLabel.innerText = mb + " MB";
+                var pct = Math.min(100, (mb / 1400) * 100);
+                bufferBarFill.style.width = pct + "%";
+
+                if (mb <= 1024) {
+                    bufferBarFill.style.background = "#00ff66";
+                    bufferUsageLabel.style.color = "#00ff66";
+                    bufferStatusBadge.innerText = "[ NORMAL PLATFORM BUFFER ]";
+                    bufferStatusBadge.style.color = "#00ff66";
+                } else if (mb <= 1177) {
+                    bufferBarFill.style.background = "#ffaa00";
+                    bufferUsageLabel.style.color = "#ffaa00";
+                    bufferStatusBadge.innerText = "[ ! +15% ELASTIC FLEX ENGAGED ]";
+                    bufferStatusBadge.style.color = "#ffaa00";
+                } else {
+                    bufferBarFill.style.background = "#ff003c";
+                    bufferUsageLabel.style.color = "#ff003c";
+                    bufferStatusBadge.innerText = "[ X REJECTED: EXCEEDS CEILING ]";
+                    bufferStatusBadge.style.color = "#ff003c";
+                }
+            });
+        }
+
+        // Nodus-V1 Live Rune Canvas
+        var runeInput = document.getElementById('rune-word-input');
+        var runeCanvas = document.getElementById('rune-live-canvas');
+        if (runeInput && runeCanvas) {
+            var rCtx = runeCanvas.getContext('2d');
+            function renderLiveRunes(word) {
+                rCtx.clearRect(0, 0, runeCanvas.width, runeCanvas.height);
+                var chars = word.toUpperCase().split('');
+                var count = Math.min(chars.length, 12);
+                if (count === 0) return;
+                var slotWidth = runeCanvas.width / (count + 1);
+                
+                for(var idx = 0; idx < count; idx++) {
+                    var char = chars[idx];
+                    var strokes = RUNE_DICT[char];
+                    if (!strokes) continue;
+                    var rx = slotWidth * (idx + 1);
+                    var ry = 40;
+                    var size = 26;
+
+                    rCtx.strokeStyle = '#ff003c';
+                    rCtx.lineWidth = 2.5;
+                    rCtx.shadowColor = '#ff003c';
+                    rCtx.shadowBlur = 8;
+                    rCtx.lineCap = 'round';
+                    rCtx.lineJoin = 'round';
+
+                    for (var s = 0; s < strokes.length; s++) {
+                        var pts = strokes[s].split('-');
+                        rCtx.beginPath();
+                        for (var j = 0; j < pts.length; j++) {
+                            var coords = pts[j].split(',').map(Number);
+                            var px = rx + (coords[0] - 1) * (size / 2);
+                            var py = ry - (coords[1] - 1) * (size / 2);
+                            if (j === 0) rCtx.moveTo(px, py);
+                            else rCtx.lineTo(px, py);
+                        }
+                        rCtx.stroke();
+                    }
+                }
+            }
+            runeInput.addEventListener('input', function(e) { renderLiveRunes(e.target.value); });
+            renderLiveRunes(runeInput.value);
+        }
+
+        // Playground Magic Circle
+        var pgCanvas = document.getElementById('playground-canvas');
+        if (pgCanvas) {
+            var pgCtx = pgCanvas.getContext('2d');
+            var slider = document.getElementById('capacity-slider');
+            var capacityVal = document.getElementById('capacity-value');
+
+            function drawPlaygroundCircle(capacity) {
+                pgCtx.clearRect(0, 0, 440, 440);
+                var pcx = 220, pcy = 220;
+                pgCtx.strokeStyle = '#ffffff';
+                pgCtx.shadowColor = '#ff003c';
+                pgCtx.shadowBlur = 10;
+                pgCtx.lineJoin = 'round';
+                
+                pgCtx.lineWidth = 2;
+                pgCtx.beginPath(); pgCtx.arc(pcx, pcy, 195, 0, Math.PI*2); pgCtx.stroke();
+                
+                var numRings = Math.max(1, Math.floor(capacity));
+                for(var i=0; i<numRings; i++) {
+                    pgCtx.lineWidth = 1;
+                    pgCtx.beginPath(); pgCtx.arc(pcx, pcy, 175 - (i*15), 0, Math.PI*2); pgCtx.stroke();
+                }
+
+                var points = capacity > 3.0 ? 8 : (capacity > 1.5 ? 6 : 4);
+                pgCtx.lineWidth = 1.5;
+                pgCtx.beginPath();
+                var polyRadius = 155 - (numRings * 4);
+                for(var i=0; i<=points; i++) {
+                    var a = (Math.PI*2/points) * i - Math.PI/2;
+                    pgCtx[i===0?'moveTo':'lineTo'](pcx+Math.cos(a)*polyRadius, pcy+Math.sin(a)*polyRadius);
+                }
+                pgCtx.stroke();
+
+                var numRunes = Math.floor(capacity * 6) + 4; 
+                var chars = Object.keys(RUNE_DICT);
+                for(var i=0; i<numRunes; i++) {
+                    var a = (Math.PI*2/numRunes) * i;
+                    var char = chars[i % chars.length];
+                    
+                    pgCtx.save();
+                    pgCtx.translate(pcx + Math.cos(a) * 185, pcy + Math.sin(a) * 185);
+                    pgCtx.rotate(a + Math.PI / 2);
+
+                    pgCtx.strokeStyle = '#ff003c';
+                    pgCtx.lineWidth = 1.5;
+                    pgCtx.shadowBlur = 6;
+                    pgCtx.lineCap = 'round';
+
+                    var strokes = RUNE_DICT[char];
+                    if(strokes) {
+                        var size = 14; 
+                        for (var s = 0; s < strokes.length; s++) {
+                            var pts = strokes[s].split('-');
+                            pgCtx.beginPath();
+                            for (var j = 0; j < pts.length; j++) {
+                                var coords = pts[j].split(',').map(Number);
+                                var x = (coords[0] - 1) * (size / 2);
+                                var y = -(coords[1] - 1) * (size / 2);
+                                if (j === 0) pgCtx.moveTo(x, y);
+                                else pgCtx.lineTo(x, y);
+                            }
+                            pgCtx.stroke();
+                        }
+                    }
+                    pgCtx.restore();
+                }
+            }
+
+            if(slider && capacityVal) {
+                slider.addEventListener('input', function(e) {
+                    var val = parseFloat(e.target.value).toFixed(1);
+                    capacityVal.innerText = val + ' GB';
+                    drawPlaygroundCircle(val);
+                });
+                drawPlaygroundCircle(1.0);
+            }
+        }
+
+        // Sound Synthesizer
+        var audioCtx, masterGain, isAudioPlaying = false;
+        function initAudio() {
+            if(audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            masterGain = audioCtx.createGain();
+            masterGain.connect(audioCtx.destination);
+            masterGain.gain.value = 0;
+
+            var osc1 = audioCtx.createOscillator(); osc1.type = 'sine'; osc1.frequency.value = 43.65;
+            var osc2 = audioCtx.createOscillator(); osc2.type = 'sawtooth'; osc2.frequency.value = 87.31;
+            var filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 160; filter.Q.value = 6;
+            
+            var lfo = audioCtx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.12;
+            var lfoGain = audioCtx.createGain(); lfoGain.gain.value = 120;
+            lfo.connect(lfoGain); lfoGain.connect(filter.frequency);
+
+            osc1.connect(masterGain); osc2.connect(filter); filter.connect(masterGain);
+            osc1.start(); osc2.start(); lfo.start();
+        }
+
+        var soundBtn = document.getElementById('soundBtn');
+        if (soundBtn) {
+            soundBtn.addEventListener('click', function() {
+                if(!audioCtx) initAudio();
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                isAudioPlaying = !isAudioPlaying;
+                masterGain.gain.setTargetAtTime(isAudioPlaying ? 0.45 : 0, audioCtx.currentTime, 1.2);
+                document.getElementById('sound-state').innerText = isAudioPlaying ? "ON" : "OFF";
+                soundBtn.classList.toggle('active', isAudioPlaying);
+            });
+        }
+    </script>
+
+    <!-- THREE.JS 3D SCENE (RUNS AS ES MODULE) -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        const container = document.getElementById('webgl-container');
+        let scene, camera, renderer, composer;
+        let monolithGroup, redStringMesh, magicCircle, coreMesh, shards = [], rings = [], ringGroup;
+        let runeFlow1, runeFlow2, embers, emberVel = [];
+        let emberCount = 2000;
+        let keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false };
+        let camOffsetX = 0, camOffsetZ = 0;
+
+        try {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x010103, 0.0035);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 15, 120);
+
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.25;
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            const renderScene = new RenderPass(scene, camera);
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.2, 0.5, 0.08);
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(bloomPass);
+
+            // Magic circle canvas
+            const texCanvas = document.createElement('canvas');
+            texCanvas.width = 2048;
+            texCanvas.height = 2048;
+            const tCtx = texCanvas.getContext('2d');
+            tCtx.fillStyle = '#000000';
+            tCtx.fillRect(0, 0, 2048, 2048);
+            const cx = 1024, cy = 1024;
+            
+            tCtx.strokeStyle = '#ffffff'; 
+            tCtx.shadowColor = '#ff003c';
+            tCtx.shadowBlur = 30;
+            
+            tCtx.lineWidth = 4;
+            tCtx.beginPath(); tCtx.arc(cx, cy, 950, 0, Math.PI*2); tCtx.stroke();
+            tCtx.lineWidth = 12;
+            tCtx.beginPath(); tCtx.arc(cx, cy, 900, 0, Math.PI*2); tCtx.stroke();
+            tCtx.lineWidth = 2;
+            tCtx.beginPath(); tCtx.arc(cx, cy, 750, 0, Math.PI*2); tCtx.stroke();
+            
+            tCtx.lineWidth = 3;
+            tCtx.beginPath();
+            for(let i=0; i<=6; i++) {
+                const a = (Math.PI*2/6) * ((i*2)%6) - Math.PI/2;
+                tCtx[i===0?'moveTo':'lineTo'](cx+Math.cos(a)*720, cy+Math.sin(a)*720);
+            }
+            tCtx.stroke();
+
+            tCtx.beginPath();
+            for(let i=0; i<=4; i++) {
+                const a = (Math.PI*2/4) * i - Math.PI/4;
+                tCtx[i===0?'moveTo':'lineTo'](cx+Math.cos(a)*720, cy+Math.sin(a)*720);
+            }
+            tCtx.stroke();
+
+            function drawRuneAtAngle(ctx, char, angle, radius, size) {
+                const strokes = RUNE_DICT[char.toUpperCase()];
+                if (!strokes) return;
+                ctx.save();
+                ctx.translate(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+                ctx.rotate(angle + Math.PI / 2);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.shadowColor = '#ff003c';
+                ctx.shadowBlur = 15;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                for (let stroke of strokes) {
+                    const points = stroke.split('-');
+                    ctx.beginPath();
+                    for (let i = 0; i < points.length; i++) {
+                        const [gx, gy] = points[i].split(',').map(Number);
+                        const x = (gx - 1) * (size / 2);
+                        const y = -(gy - 1) * (size / 2);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            const message = "RED STRING P2P FABRIC FATE SYNC AUTONOMOUS WEAVE";
+            const letters = message.split('');
+            for(let i=0; i<letters.length; i++) {
+                const angle = (Math.PI*2 / letters.length) * i;
+                drawRuneAtAngle(tCtx, letters[i], angle, 825, 42);
+            }
+
+            for(let i=0; i<36; i++) {
+                const a = (Math.PI*2/36) * i;
+                tCtx.beginPath();
+                tCtx.arc(cx + Math.cos(a)*925, cy + Math.sin(a)*925, 4, 0, Math.PI*2);
+                tCtx.fillStyle = '#ffffff';
+                tCtx.fill();
+            }
+
+            const magicTexture = new THREE.CanvasTexture(texCanvas);
+            magicTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+            // Ground
+            const groundGeo = new THREE.PlaneGeometry(800, 800, 160, 160);
+            const pos = groundGeo.attributes.position;
+            for(let i=0; i<pos.count; i++) {
+                const x = pos.getX(i);
+                const y = pos.getY(i);
+                const dist = Math.sqrt(x*x + y*y);
+                let z = 0;
+                if (dist > 40) {
+                    z = Math.sin(x*0.03)*Math.cos(y*0.03)*12 + Math.sin(x*0.08)*4;
+                    z += (dist - 40) * 0.1;
+                } else {
+                    z = -2 + (dist/40)*2;
+                }
+                pos.setZ(i, z);
+            }
+            groundGeo.computeVertexNormals();
+
+            const groundMat = new THREE.MeshStandardMaterial({ 
+                color: 0x050508, 
+                roughness: 0.14, 
+                metalness: 0.92,
+                flatShading: false
+            });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI/2;
+            ground.position.y = -5;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Magic Circle Decal
+            const circleGeo = new THREE.PlaneGeometry(160, 160);
+            const circleMat = new THREE.MeshBasicMaterial({
+                map: magicTexture, 
+                color: 0xff003c, 
+                transparent: true,
+                blending: THREE.AdditiveBlending, 
+                depthWrite: false, 
+                opacity: 0.9
+            });
+            magicCircle = new THREE.Mesh(circleGeo, circleMat);
+            magicCircle.rotation.x = -Math.PI/2;
+            magicCircle.position.y = -4.7;
+            scene.add(magicCircle);
+
+            // Monolith & Glowing Red String
+            monolithGroup = new THREE.Group();
+            monolithGroup.position.y = 25;
+            scene.add(monolithGroup);
+
+            const glassMat = new THREE.MeshPhysicalMaterial({
+                color: 0x000000,
+                metalness: 1.0,
+                roughness: 0.08,
+                transmission: 0.9,
+                thickness: 2.2,
+                ior: 2.5,
+                clearcoat: 1.0,
+                clearcoatRoughness: 0.1,
+                side: THREE.DoubleSide
+            });
+
+            const coreGeo = new THREE.OctahedronGeometry(15, 0);
+            coreMesh = new THREE.Mesh(coreGeo, glassMat);
+            coreMesh.scale.set(1, 2.5, 1);
+            coreMesh.castShadow = true;
+            monolithGroup.add(coreMesh);
+
+            const shardGeo = new THREE.TetrahedronGeometry(4, 0);
+            for(let i=0; i<12; i++) {
+                const shard = new THREE.Mesh(shardGeo, glassMat);
+                const radius = 22 + Math.random()*16;
+                const angle = (Math.PI*2/12) * i;
+                const height = (Math.random()-0.5)*40;
+                shard.position.set(Math.cos(angle)*radius, height, Math.sin(angle)*radius);
+                shard.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+                shard.castShadow = true;
+                monolithGroup.add(shard);
+                
+                shards.push({
+                    mesh: shard,
+                    speedY: (Math.random()-0.5)*0.02,
+                    speedR: (Math.random()-0.5)*0.05,
+                    baseY: height,
+                    angle: angle,
+                    radius: radius
+                });
+            }
+
+            // Red string tube
+            const stringPoints = [];
+            const curveSegments = 24;
+            for (let i = 0; i <= curveSegments; i++) {
+                const theta = (i / curveSegments) * Math.PI * 4;
+                const r = 24 + Math.sin(i * 1.5) * 8;
+                const y = -14 + (i / curveSegments) * 58;
+                stringPoints.push(new THREE.Vector3(Math.cos(theta) * r, y, Math.sin(theta) * r));
+            }
+            const stringCurve = new THREE.CatmullRomCurve3(stringPoints, true);
+            const stringGeo = new THREE.TubeGeometry(stringCurve, 128, 0.45, 8, true);
+            const stringMat = new THREE.MeshBasicMaterial({
+                color: 0xff003c,
+                transparent: true,
+                opacity: 0.95,
+                blending: THREE.AdditiveBlending
+            });
+            redStringMesh = new THREE.Mesh(stringGeo, stringMat);
+            monolithGroup.add(redStringMesh);
+
+            ringGroup = new THREE.Group();
+            monolithGroup.add(ringGroup);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0xff003c, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending });
+            for(let i=0; i<3; i++) {
+                const rGeo = new THREE.TorusGeometry(34 + i*8, 0.18, 16, 128);
+                const ring = new THREE.Mesh(rGeo, ringMat);
+                ring.rotation.x = Math.random() * Math.PI;
+                ring.rotation.y = Math.random() * Math.PI;
+                ringGroup.add(ring);
+                rings.push({
+                    mesh: ring,
+                    rx: (Math.random()-0.5)*0.006,
+                    ry: (Math.random()-0.5)*0.012
+                });
+            }
+
+            const runeCylGeo = new THREE.CylinderGeometry(18, 18, 26, 32, 1, true);
+            const runeCylMat1 = new THREE.MeshBasicMaterial({
+                map: magicTexture,
+                color: 0xffaa00,
+                transparent: true,
+                opacity: 0.85,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+            runeFlow1 = new THREE.Mesh(runeCylGeo, runeCylMat1);
+            
+            const runeCylMat2 = runeCylMat1.clone();
+            runeCylMat2.color.setHex(0xffffff);
+            runeFlow2 = new THREE.Mesh(runeCylGeo, runeCylMat2);
+            runeFlow2.scale.set(1.15, 0.8, 1.15);
+            
+            monolithGroup.add(runeFlow1);
+            monolithGroup.add(runeFlow2);
+
+            const emberGeo = new THREE.BufferGeometry();
+            const emberPos = new Float32Array(emberCount * 3);
+            const emberCols = new Float32Array(emberCount * 3);
+            const colorPalette = [
+                new THREE.Color(0xff003c),
+                new THREE.Color(0xffaa00),
+                new THREE.Color(0xffffff),
+                new THREE.Color(0xff1a66)
+            ];
+
+            for(let i=0; i<emberCount; i++) {
+                const r = 10 + Math.random()*85;
+                const theta = Math.random()*Math.PI*2;
+                const y = -5 + Math.random()*100;
+                emberPos[i*3] = Math.cos(theta)*r;
+                emberPos[i*3+1] = y;
+                emberPos[i*3+2] = Math.sin(theta)*r;
+                
+                const c = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+                emberCols[i*3] = c.r;
+                emberCols[i*3+1] = c.g;
+                emberCols[i*3+2] = c.b;
+
+                emberVel.push({
+                    y: 0.05 + Math.random()*0.1,
+                    x: (Math.random()-0.5)*0.05,
+                    z: (Math.random()-0.5)*0.05
+                });
+            }
+            emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPos, 3));
+            emberGeo.setAttribute('color', new THREE.BufferAttribute(emberCols, 3));
+
+            const ptCanvas = document.createElement('canvas');
+            ptCanvas.width = 32; ptCanvas.height = 32;
+            const pCtx = ptCanvas.getContext('2d');
+            const grad = pCtx.createRadialGradient(16,16,0, 16,16,16);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(0.25, 'rgba(255,255,255,0.7)');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            pCtx.fillStyle = grad; pCtx.fillRect(0,0,32,32);
+            const ptTex = new THREE.CanvasTexture(ptCanvas);
+
+            const emberMat = new THREE.PointsMaterial({
+                size: 1.6, map: ptTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, vertexColors: true
+            });
+            embers = new THREE.Points(emberGeo, emberMat);
+            scene.add(embers);
+
+            scene.add(new THREE.AmbientLight(0x0a0a10, 0.6));
+            const coreLight = new THREE.PointLight(0xff003c, 1600, 220); 
+            coreLight.position.set(0, 25, 0);
+            scene.add(coreLight);
+
+            const rimLight = new THREE.SpotLight(0x88aaff, 2200);
+            rimLight.position.set(50, 100, -80);
+            rimLight.angle = Math.PI/4;
+            rimLight.penumbra = 0.8;
+            rimLight.castShadow = true;
+            scene.add(rimLight);
+
+            let clock = new THREE.Clock();
+            let mouseX = 0, mouseY = 0;
+            let scrollY = 0, targetScrollY = 0;
+
+            document.addEventListener('mousemove', (e) => {
+                mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+                mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+            });
+            window.addEventListener('scroll', () => { targetScrollY = window.scrollY; });
+
+            document.addEventListener('keydown', (e) => { if(keys[e.key] !== undefined) keys[e.key] = true; });
+            document.addEventListener('keyup', (e) => { if(keys[e.key] !== undefined) keys[e.key] = false; });
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const delta = clock.getDelta();
+                const time = clock.getElapsedTime();
+                
+                scrollY += (targetScrollY - scrollY) * 0.08;
+                const vh = window.innerHeight;
+                let scrollProgress = scrollY / vh; 
+
+                const speed = 0.6;
+                if (keys.ArrowUp || keys.w) camOffsetZ -= speed;
+                if (keys.ArrowDown || keys.s) camOffsetZ += speed;
+                if (keys.ArrowLeft || keys.a) camOffsetX -= speed;
+                if (keys.ArrowRight || keys.d) camOffsetX += speed;
+
+                const targetCamZ = 120 - (scrollProgress * 80) + camOffsetZ; 
+                const targetCamY = 15 + (scrollProgress * 15);  
+                
+                const parallaxX = mouseX * 10 + camOffsetX;
+                const parallaxY = mouseY * 10;
+
+                camera.position.x += ((parallaxX) - camera.position.x) * 0.05;
+                camera.position.y += ((targetCamY + parallaxY) - camera.position.y) * 0.05;
+                camera.position.z += (targetCamZ - camera.position.z) * 0.05;
+
+                camera.lookAt(new THREE.Vector3(camOffsetX, 25 + scrollProgress * 10, camOffsetZ));
+
+                runeFlow1.rotation.y = -time * 0.3;
+                runeFlow2.rotation.y = time * 0.5;
+                runeFlow1.position.y = Math.sin(time) * 1.5;
+                runeFlow2.position.y = Math.cos(time * 1.2) * 1.5;
+
+                magicCircle.rotation.z = -time * 0.05;
+                coreMesh.rotation.y = time * 0.2;
+                coreMesh.position.y = Math.sin(time) * 2; 
+
+                if (redStringMesh) {
+                    redStringMesh.rotation.y = time * 0.12;
+                    redStringMesh.rotation.z = Math.sin(time * 0.6) * 0.06;
+                    stringMat.opacity = 0.8 + Math.sin(time * 2.5) * 0.18;
+                }
+
+                shards.forEach((s, i) => {
+                    s.angle += delta * 0.2;
+                    s.mesh.position.x = Math.cos(s.angle) * s.radius;
+                    s.mesh.position.z = Math.sin(s.angle) * s.radius;
+                    s.mesh.position.y = s.baseY + Math.sin(time*2 + i) * 5;
+                    s.mesh.rotation.x += s.speedR;
+                    s.mesh.rotation.y += s.speedR;
+                });
+
+                rings.forEach(r => {
+                    r.mesh.rotation.x += r.rx;
+                    r.mesh.rotation.y += r.ry;
+                });
+                ringGroup.rotation.y = time * 0.1;
+
+                const positions = embers.geometry.attributes.position.array;
+                for(let i=0; i<emberCount; i++) {
+                    positions[i*3] += emberVel[i].x;
+                    positions[i*3+1] += emberVel[i].y;
+                    positions[i*3+2] += emberVel[i].z;
+                    
+                    if(positions[i*3+1] > 80) {
+                        positions[i*3+1] = -5;
+                        positions[i*3] = Math.cos(Math.random()*Math.PI*2) * (10 + Math.random()*85);
+                        positions[i*3+2] = Math.sin(Math.random()*Math.PI*2) * (10 + Math.random()*85);
+                    }
+                }
+                embers.geometry.attributes.position.needsUpdate = true;
+
+                coreLight.intensity = 1600 + Math.sin(time * 8) * 120 + Math.random() * 150;
+                composer.render();
+            }
+
+            animate();
+
+        } catch (err) {
+            console.warn("WebGL 3D fallback engaged:", err);
+            container.innerHTML = `<div style="width:100vw;height:100vh;background:radial-gradient(circle,#1a0008 0%,#030305 100%);display:flex;align-items:center;justify-content:center;"><div style="font-family:var(--font-mono);color:var(--red);letter-spacing:2px;">[ 2D ENGINE FALLBACK ACTIVATED ]</div></div>`;
+        }
+
+        window.addEventListener('resize', () => {
+            if (camera && renderer && composer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                composer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+    </script>
+</body>
+</html>
