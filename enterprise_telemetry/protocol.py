@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Red String Enterprise Binary Chunk Framing Engine
 Zero-Overhead Wire Protocol (17-Byte Header, Network Byte Order)

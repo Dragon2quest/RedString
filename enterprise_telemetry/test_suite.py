@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Comprehensive Test Suite for Red String Enterprise Overhaul
 Validates 17-byte binary framing, O(1) telemetry entropy, edge ML latency, and quarantine boundaries.

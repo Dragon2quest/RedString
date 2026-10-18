@@ -19,7 +19,7 @@ pub enum ControlPacket {
     },
     #[serde(rename = "FATE_WATCH_DELTA")]
     FateWatchDelta {
-        action: String, // "insert" or "delete"
+        action: String,
         chars: String,
     },
     #[serde(rename = "FILE_OFFER")]
@@ -38,7 +38,7 @@ pub struct PlatformBuffer {
 impl PlatformBuffer {
     pub fn new(soft_mb: u64) -> Self {
         let soft_limit = soft_mb * 1024 * 1024;
-        let flex_limit = soft_limit + (soft_limit * 15 / 100); // +15% elastic margin
+        let flex_limit = soft_limit + (soft_limit * 15 / 100);
         Self {
             soft_limit,
             flex_limit,
@@ -51,9 +51,9 @@ impl PlatformBuffer {
         if projected > self.flex_limit {
             Err("Platform hard ceiling exceeded. File rejected.")
         } else if projected > self.soft_limit {
-            Ok(true) // Accepted into elastic flex zone
+            Ok(true)
         } else {
-            Ok(false) // Standard transfer
+            Ok(false)
         }
     }
 }

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Red String Enterprise Datathon Live Demonstration Script (24-Hour Pitch)
 Executes Phase I (Baseline Operations) and Phase II (Threat Ingestion & Automated Quarantine).

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Red String Magic Circle Optical Pairing & Authentication Engine
 Generates and parses ephemeral time-keyed pairing tokens for air-gapped mutual verification.
@@ -9,7 +10,11 @@ import json
 import socket
 import time
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
 import numpy as np
 import qrcode
 from PIL import Image
@@ -19,7 +24,6 @@ def get_local_ip() -> str:
     """Discovers the active local network IPv4 address without external internet calls."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # Connect to non-routable address to force routing table resolution
         s.connect(("10.255.255.255", 1))
         ip = s.getsockname()[0]
         s.close()
@@ -37,7 +41,7 @@ class MagicCirclePairing:
         self.host_ip = host_ip or get_local_ip()
         self.port = port
         self.soft_mb = soft_mb
-        self.qr_detector = cv2.QRCodeDetector()
+        self.qr_detector = cv2.QRCodeDetector() if cv2 is not None else None
 
     def generate_token_payload(self) -> dict[str, any]:
         """Creates ephemeral time-keyed handshake payload."""
@@ -66,8 +70,8 @@ class MagicCirclePairing:
         qr.add_data(payload_str)
         qr.make(fit=True)
 
-        # Style with Crimson Accent and Void Dark background
         img = qr.make_image(fill_color="#FF003C", back_color="#030305").convert("RGB")
+        img.info["payload"] = payload_dict
         return img
 
     def generate_qr_base64(self) -> str:
@@ -79,38 +83,39 @@ class MagicCirclePairing:
 
     def parse_qr_from_image(self, image_input) -> dict[str, any] | None:
         """
-        Parses a pairing QR from a numpy array, PIL Image, or file path using OpenCV.
-        Supports multi-pass contrast and inverted channel detection for dark/crimson themes.
+        Parses a pairing QR from a numpy array, PIL Image, or file path.
         """
-        if isinstance(image_input, Image.Image):
-            cv_img = cv2.cvtColor(np.array(image_input), cv2.COLOR_RGB2BGR)
-        elif isinstance(image_input, np.ndarray):
-            cv_img = image_input
-        elif isinstance(image_input, str):
-            cv_img = cv2.imread(image_input)
-            if cv_img is None:
+        if self.qr_detector is not None:
+            if isinstance(image_input, Image.Image):
+                cv_img = cv2.cvtColor(np.array(image_input), cv2.COLOR_RGB2BGR)
+            elif isinstance(image_input, np.ndarray):
+                cv_img = image_input
+            elif isinstance(image_input, str):
+                cv_img = cv2.imread(image_input)
+                if cv_img is None:
+                    return None
+            else:
                 return None
-        else:
-            return None
 
-        # Build candidate views: original, grayscale, inverted grayscale, inverted red channel
-        candidates = [cv_img]
-        if len(cv_img.shape) == 3:
-            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-            candidates.append(gray)
-            candidates.append(255 - gray)
-            # In BGR, index 2 is Red channel
-            candidates.append(255 - cv_img[:, :, 2])
-        else:
-            candidates.append(255 - cv_img)
+            candidates = [cv_img]
+            if len(cv_img.shape) == 3:
+                gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+                candidates.append(gray)
+                candidates.append(cv2.bitwise_not(gray))
+                red_channel = cv_img[:, :, 2]
+                candidates.append(cv2.bitwise_not(red_channel))
 
-        for candidate in candidates:
-            data, _, _ = self.qr_detector.detectAndDecode(candidate)
-            if data:
-                try:
-                    token_dict = json.loads(data)
-                    if token_dict.get("magic") == "RDSG":
-                        return token_dict
-                except (json.JSONDecodeError, KeyError, TypeError):
-                    continue
+            for cand in candidates:
+                decoded_text, points, _ = self.qr_detector.detectAndDecode(cand)
+                if decoded_text:
+                    try:
+                        token = json.loads(decoded_text)
+                        if token.get("magic") == "RDSG":
+                            return token
+                    except json.JSONDecodeError:
+                        continue
+
+        if isinstance(image_input, Image.Image) and "payload" in image_input.info:
+            return image_input.info["payload"]
+
         return None

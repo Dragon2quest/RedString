@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Red String Non-Invasive Behavioral Telemetry Engine (Fate Watch)
 Calculates O(1) 4-Dimensional Kinetic Signatures in sub-millisecond time without payload inspection.

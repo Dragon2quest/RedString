@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Red String Enterprise Socket Fabric & Quarantine Engine
 Direct TCP air-gapped listener with Zero-Trust pre-commit scoring gate and tamper-proof audit trail.
@@ -54,7 +55,7 @@ class ForensicAuditLogger:
             ts = time.time()
             record_payload = {
                 "timestamp": ts,
-                "iso_time": datetime.datetime.fromtimestamp(ts, tz=datetime.UTC).isoformat(),
+                "iso_time": datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat(),
                 "event_type": event_type,
                 "prev_hash": self.last_hash,
                 "details": details,
