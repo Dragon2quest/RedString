@@ -109,47 +109,54 @@ RedString/
 
 ---
 
-## 🚀 Quickstart Guide
+### 1. 🖥️ 1-Click Web GUI & Command Center (All Operating Systems)
 
-### 1. Prerequisites
+Red String features an embedded, zero-dependency **Unified Web GUI & Command Center** accessible locally or across the network on port `8080`.
+
+| Operating System | 1-Click Launch Command | Desktop Shortcut Setup |
+|:---|:---|:---|
+| **🐧 Linux / IBM LinuxONE** | `./start_gui.sh` | `./install_linux.sh` (creates desktop icon & systemd unit) |
+| **🪟 Windows (10/11)** | `start_gui.bat` | `install_windows.bat` (creates `.lnk` Desktop shortcut) |
+| **🍎 macOS** | `./start_gui_mac.command` | Double-click `start_gui_mac.command` in Finder |
+
+- **Local Access URL**: `http://localhost:8080`
+- **Remote Server Access URL**: `http://<server-ip>:8080` (e.g. `http://148.100.108.184:8080`)
+
+#### GUI Capabilities:
+- **1-Click Service Management**: Spin up or shut down the Python ML Telemetry listener or Rust high-performance socket fabric on port `7788`.
+- **Live Threat & Quarantine Simulator**: Test Phase I (Nominal sync) and Phase II (Simulated attack) with real-time log streaming and sub-millisecond anomaly detection readouts.
+- **Magic Circle Pairing Station**: Dynamic rotating canvas glyph generator with 5-minute ephemeral tokens and QR connection strings.
+- **Cryptographic Audit Ledger**: Live view of `forensic_audit_trail.jsonl` with automated SHA-256 chain verification badges.
+- **Socket Testing Deck**: Transmit custom payloads across the 5-byte framed socket directly from the browser.
+
+---
+
+### 2. Running via Terminal / CLI
+
+#### Prerequisites
 - **Rust**: `cargo` and `rustc` (1.70+)
 - **Python**: Python 3.9+ with `numpy`, `scikit-learn`, `joblib`
 - **Operating System**: Linux (Ubuntu, RHEL, IBM LinuxONE s390x) or Windows 10/11
 
-### 2. Running on Linux / IBM LinuxONE
+#### Running on Linux / IBM LinuxONE via CLI:
 
-#### Run the Complete Threat & Quarantine Demo
-The interactive demo demonstrates baseline safe traffic followed by an attempted exfiltration threat that is quarantined in sub-milliseconds:
 ```bash
-chmod +x run_demo.sh
-./run_demo.sh
+# 1. Complete Live Demo (Baseline vs Exfiltration Quarantine)
+chmod +x run_demo.sh && ./run_demo.sh
+
+# 2. Run Automated Test Suite
+chmod +x run_tests.sh && ./run_tests.sh
+
+# 3. Run Telemetry & Zero-Trust Socket Server
+chmod +x run_telemetry_server.sh && ./run_telemetry_server.sh
+
+# 4. Run Native Rust High-Performance Server
+chmod +x run_rust_server.sh && ./run_rust_server.sh
 ```
 
-#### Run Automated Test Suite
-```bash
-chmod +x run_tests.sh
-./run_tests.sh
-```
-
-#### Run Telemetry & Zero-Trust Server
-```bash
-chmod +x run_telemetry_server.sh
-./run_telemetry_server.sh
-```
-
-#### Run Rust Core Transport Server
-```bash
-chmod +x run_rust_server.sh
-./run_rust_server.sh
-```
-
-### 3. Running on Windows
-Double-click or run from PowerShell / Command Prompt:
+#### Running on Windows via CLI:
 ```cmd
 run_enterprise_demo.bat
-```
-Or start the enterprise console:
-```cmd
 run_enterprise_console.bat
 ```
 
